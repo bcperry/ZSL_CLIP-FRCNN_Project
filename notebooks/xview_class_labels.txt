@@ -1,6 +1,6 @@
 11:Fixed-wing Aircraft
 12:Small Aircraft
-13:Cargo Plane
+13:Passenger/Cargo Plane
 15:Helicopter
 17:Passenger Vehicle
 18:Small Car
@@ -9,15 +9,15 @@
 21:Utility Truck
 23:Truck
 24:Cargo Truck
-25:Truck w/Box
+25:Truck Tractor w/ Box Trailer
 26:Truck Tractor
 27:Trailer
-28:Truck w/Flatbed
-29:Truck w/Liquid
+28:Truck Tractor w/ Flatbed Trailer
+29:Truck Tractor w/ Liquid Tank
 32:Crane Truck
 33:Railway Vehicle
 34:Passenger Car
-35:Cargo Car
+35:Cargo/Container Car
 36:Flat Car
 37:Tank car
 38:Locomotive
