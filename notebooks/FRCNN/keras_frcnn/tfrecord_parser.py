@@ -1,6 +1,5 @@
-import cv2
-import numpy as np
 import tensorflow as tf
+import glob
 
 
 def get_data(input_path, data_type):
@@ -10,27 +9,28 @@ def get_data(input_path, data_type):
     classes_count = {}
 
     class_mapping = {}
+    
+    label_file = glob.glob(input_path + '/*labels.txt')
+    
+    record_file = glob.glob(input_path + "/*" + data_type + "*.record")
+  
 
-    visualise = True
-    
-    input_path = input_path + r'\xview_' + data_type + '_sample.record'
-    
-    
     #read in the class labels
     class_dict = {}
-    file = open(r'C:\Data_drive\Data\xview_class_labels.txt', "r")
+    file = open(label_file[0], "r")
 
     #create a class label dictionary
     for line in file:
         key, value = line.split(':')
         class_dict[int(key)] = value.strip()
         
-    #for debugging within tf.functions
+    #for debugging within tf.function
+    '''
     import pdb
     tf.data.experimental.enable_debug_mode()
+    '''
     
-    
-    with open(input_path,'r') as f:
+    with open(record_file[0],'r') as f:
 
         print('Parsing annotation files')
 
@@ -78,14 +78,14 @@ def get_data(input_path, data_type):
         
         
         batch_size = 5
-        TFdataset = get_dataset(input_path, batch_size)
+        TFdataset = get_dataset(input_path + "/*" + data_type + "*.record", batch_size)
 
+        record_file = glob.glob(input_path + "/*" + data_type + "*.record")
         
-        total_records = sum(1 for _ in tf.data.TFRecordDataset(input_path))
+        total_records = sum(1 for _ in tf.data.TFRecordDataset(record_file[0]))
         print("total records in the TFrecord file is : " + str(total_records))
         
         #find the number of classes in the tfrecord file
-        full_set = set()
         filename = -1
         for example in TFdataset:  # example is `{'image': tf.Tensor, 'label': tf.Tensor}`
             #loop through each image in the batch
