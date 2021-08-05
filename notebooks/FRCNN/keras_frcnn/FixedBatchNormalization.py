@@ -18,6 +18,9 @@ class FixedBatchNormalization(Layer):
         self.beta_regularizer = regularizers.get(beta_regularizer)
         self.initial_weights = weights
         super(FixedBatchNormalization, self).__init__(**kwargs)
+    
+    def compute_output_shape(self, input_shape):
+        return input_shape
 
     def build(self, input_shape):
         self.input_spec = [InputSpec(shape=input_shape)]

@@ -21,6 +21,8 @@ class Config:
         #path to the input weights. If trainining for the first time use None to load imagenet weights
         self.input_weight_path = None
         
+        self.batch_size = 1
+        
         
         
         

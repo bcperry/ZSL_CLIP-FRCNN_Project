@@ -13,13 +13,10 @@ import keras_frcnn.roi_helpers as roi_helpers
 import random
 from tensorflow.keras import backend as K
 from tensorflow.keras.losses import categorical_crossentropy
+from . import resnet as nn
+from . import data_generators
+from . import train_helpers
 
-
-
-
-from tensorflow.python.eager import def_function
-
-from tensorflow.python.ops import math_ops
 
 
 import tensorflow.python.ops.numpy_ops.np_config as npc
@@ -27,14 +24,14 @@ npc.enable_numpy_behavior()
 
 
 class FRCNN(keras.Model):
-    def __init__(self, rpn, frcnn, C, class_mapping, num_classes, **kwargs):
+    def __init__(self, rpn, frcnn, **kwargs):
         super(FRCNN, self).__init__(**kwargs)
         self.rpn = rpn
         self.frcnn = frcnn
-        self.class_mapping = class_mapping
-        self.C = C
-        self.num_classes = num_classes
-
+        (feature_map_width, feature_map_height) = nn.get_feature_map_size(rpn)
+        self.class_mapping = train_helpers.get_class_map()
+        self.feature_map_width = feature_map_width
+        self.feature_map_height = feature_map_height
     
     def call(self, X, training=False):
 
@@ -92,40 +89,11 @@ class FRCNN(keras.Model):
         else:
             rpn_pred = self.rpn(data['image'])
             
+            img_data = data_generators.batch_processor(data)
+            
             #R input and output are in feature space
-            R = roi_helpers.rpn_to_roi(rpn_pred[0], rpn_pred[1], self.C, use_regr=True, overlap_thresh=0.1, max_boxes=900)
-            
-            class_id = tf.sparse.to_dense(data['image/object/class/label']).numpy()
-            
-            image = data['image'].numpy()
-            (w, h) = image.shape[:2]
-            
-            x1 = (tf.sparse.to_dense(data['image/object/bbox/xmin']).numpy() * w).round().astype(int)
-            x2 = (tf.sparse.to_dense(data['image/object/bbox/xmax']).numpy() * w).round().astype(int)
-            y1 = (tf.sparse.to_dense(data['image/object/bbox/ymin']).numpy() * h).round().astype(int)
-            y2 = (tf.sparse.to_dense(data['image/object/bbox/ymax']).numpy() * h).round().astype(int)
-            
-            #drop 0s due to the sparse to dense
-            zeroes_map = class_id != 0
-            class_id = class_id[zeroes_map]
-            x1 = x1[zeroes_map]
-            x2 = x2[zeroes_map]
-            y1 = y1[zeroes_map]
-            y2 = y2[zeroes_map]
-                
-            try:
-                assert len(class_id) == len(x1) == len(x2) == len(y1) == len(y2)
-            except Exception as e:
-                print(f'Exception: {e}')
-                
-            
-            
-            img_data = {}
-            bboxes = {}
-            width = data['image'].shape[1]
-            height = data['image'].shape[2]
-            for i in range(len(class_name)):
-                img_data['bboxes'].append({'class': class_name[i], 'x1': x1[i], 'x2': x2[i], 'y1': y1[i], 'y2': y2[i]})
+            R = roi_helpers.rpn_to_roi(rpn_pred[0], rpn_pred[1], use_regr=True, overlap_thresh=0.1, max_boxes=900)
+
             
             # note: calc_iou converts from (x1,y1,x2,y2) to (x,y,w,h) format
             X2, Y1, Y2, IouS = roi_helpers.calc_iou(R, img_data, self.C, self.class_mapping)

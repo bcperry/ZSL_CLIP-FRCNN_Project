@@ -1,12 +1,11 @@
 from __future__ import absolute_import
 import numpy as np
-import cv2
 import random
-import copy
 from . import data_augment
 import threading
 import itertools
-
+from . import config
+from . import resnet as nn
 
 def union(au, bu, area_intersection):
     area_a = (au[2] - au[0]) * (au[3] - au[1])
@@ -76,8 +75,10 @@ class SampleSelector:
             return True
 
 
-def calc_rpn(C, img_data, width, height, resized_width, resized_height, output_width, output_height):
-
+def calc_rpn(img_data, output_width, output_height):
+    
+    C = config.Config()
+    
     downscale = float(C.rpn_stride)
     anchor_sizes = C.anchor_box_scales
     anchor_ratios = C.anchor_box_ratios
@@ -102,10 +103,10 @@ def calc_rpn(C, img_data, width, height, resized_width, resized_height, output_w
     gta = np.zeros((num_bboxes, 4))
     for bbox_num, bbox in enumerate(img_data['bboxes']):
         # get the GT box coordinates, and resize to account for image resizing
-        gta[bbox_num, 0] = bbox['x1'] * (resized_width / float(width))
-        gta[bbox_num, 1] = bbox['x2'] * (resized_width / float(width))
-        gta[bbox_num, 2] = bbox['y1'] * (resized_height / float(height))
-        gta[bbox_num, 3] = bbox['y2'] * (resized_height / float(height))
+        gta[bbox_num, 0] = bbox['x1']
+        gta[bbox_num, 1] = bbox['x2']
+        gta[bbox_num, 2] = bbox['y1']
+        gta[bbox_num, 3] = bbox['y2']
 
     # rpn ground truth
 
@@ -120,7 +121,7 @@ def calc_rpn(C, img_data, width, height, resized_width, resized_height, output_w
                 x2_anc = downscale * (ix + 0.5) + anchor_x / 2	
 
                 # ignore boxes that go across image boundaries					
-                if x1_anc < 0 or x2_anc > resized_width:
+                if x1_anc < 0 or x2_anc > C.im_size:
                     continue
 
                 for jy in range(output_height):
@@ -130,7 +131,7 @@ def calc_rpn(C, img_data, width, height, resized_width, resized_height, output_w
                     y2_anc = downscale * (jy + 0.5) + anchor_y / 2
 
                     # ignore boxes that go across image boundaries
-                    if y1_anc < 0 or y2_anc > resized_height:
+                    if y1_anc < 0 or y2_anc > C.im_size:
                         continue
 
                     # bbox_type indicates whether an anchor should be a target 
@@ -315,9 +316,39 @@ def threadsafe_generator(f):
         return threadsafe_iter(f(*a, **kw))
     return g
 
-def get_anchor_gt(all_img_data, class_count, C, feature_map_width, feature_map_height, mode='train'):
+def calc_targets(x_img, img_data, feature_map_width, feature_map_height):
+    C = config.Config()
+    
+    try:
+        y_rpn_cls, y_rpn_regr = calc_rpn(img_data, feature_map_width, feature_map_height)
+    except:
+        print('Error calculating the truth values for the rpn')
+
+    # Zero-center by mean pixel, and preprocess image
+
+    x_img = x_img[:,:, (2, 1, 0)]  # BGR -> RGB
+    x_img = x_img.astype(np.float32)
+    x_img[:, :, 0] -= C.img_channel_mean[0]
+    x_img[:, :, 1] -= C.img_channel_mean[1]
+    x_img[:, :, 2] -= C.img_channel_mean[2]
+    x_img /= C.img_scaling_factor
+
+    x_img = np.transpose(x_img, (2, 0, 1))
+    x_img = np.expand_dims(x_img, axis=0)
+
+    y_rpn_regr[:, y_rpn_regr.shape[1]//2:, :, :] *= C.std_scaling
 
 
+    x_img = np.transpose(x_img, (0, 2, 3, 1))
+    y_rpn_cls = np.transpose(y_rpn_cls, (0, 2, 3, 1))
+    y_rpn_regr = np.transpose(y_rpn_regr, (0, 2, 3, 1))
+
+    return np.copy(x_img), [np.copy(y_rpn_cls), np.copy(y_rpn_regr)], img_data
+
+
+def get_anchor_gt(all_img_data, class_count, feature_map_width, feature_map_height, mode='train'):
+    C = config.Config()
+    
     sample_selector = SampleSelector(class_count)
 
     while True:
@@ -342,40 +373,10 @@ def get_anchor_gt(all_img_data, class_count, C, feature_map_width, feature_map_h
 
                 assert cols == width
                 assert rows == height
+                
+                img, targets, img_data = calc_targets(x_img, img_data_aug, feature_map_width, feature_map_height)
 
-                # get image dimensions for resizing
-                (resized_width, resized_height) = get_new_img_size(width, height, C.im_size)
-
-                # resize the image so that smalles side is length = 600px
-                x_img = cv2.resize(x_img, (resized_width, resized_height), interpolation=cv2.INTER_CUBIC)
-
-                try:
-                    y_rpn_cls, y_rpn_regr = calc_rpn(C, img_data_aug, width, height, resized_width, resized_height, feature_map_width, feature_map_height)
-                except:
-                    print('Error calculating the truth values for the rpn')
-                    
-                    continue
-
-                # Zero-center by mean pixel, and preprocess image
-
-                x_img = x_img[:,:, (2, 1, 0)]  # BGR -> RGB
-                x_img = x_img.astype(np.float32)
-                x_img[:, :, 0] -= C.img_channel_mean[0]
-                x_img[:, :, 1] -= C.img_channel_mean[1]
-                x_img[:, :, 2] -= C.img_channel_mean[2]
-                x_img /= C.img_scaling_factor
-
-                x_img = np.transpose(x_img, (2, 0, 1))
-                x_img = np.expand_dims(x_img, axis=0)
-
-                y_rpn_regr[:, y_rpn_regr.shape[1]//2:, :, :] *= C.std_scaling
-
-
-                x_img = np.transpose(x_img, (0, 2, 3, 1))
-                y_rpn_cls = np.transpose(y_rpn_cls, (0, 2, 3, 1))
-                y_rpn_regr = np.transpose(y_rpn_regr, (0, 2, 3, 1))
-            
-                yield np.copy(x_img), [np.copy(y_rpn_cls), np.copy(y_rpn_regr)], img_data_aug
+                yield img, targets, img_data
                 #yield [np.copy(x_img), img_data_aug], [np.copy(y_rpn_cls), np.copy(y_rpn_regr)]
 
 

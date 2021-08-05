@@ -75,8 +75,8 @@ class RoiPoolingConv(Layer):
             outputs.append(rs)
 
         final_output = K.concatenate(outputs, axis=0)
-        final_output = K.reshape(final_output, (1, self.num_rois, self.pool_size, self.pool_size, self.nb_channels))
 
+        final_output = K.reshape(final_output, (-1, self.num_rois, self.pool_size, self.pool_size, self.nb_channels))
 
         final_output = K.permute_dimensions(final_output, (0, 1, 2, 3, 4))
 
