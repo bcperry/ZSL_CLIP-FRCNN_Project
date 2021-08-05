@@ -58,8 +58,8 @@ if model_path_regex.group(2) != '.hdf5':
 
 
 
-train_imgs, classes_count, class_mapping, train_dataset = get_data(C.train_path, 'train')
-val_imgs, _, _, val_dataset = get_data(C.train_path, 'test')
+train_dataset, total_train_records = get_data(C.train_path, 'train')
+val_dataset, total_val_records = get_data(C.train_path, 'test')
 
 class_mapping = train_helpers.get_class_map()
 
@@ -69,13 +69,10 @@ num_ids = class_mapping[max(class_mapping, key=class_mapping.get)]
 
 inv_map = {v: k for k, v in class_mapping.items()}
 
+num_imgs = total_train_records
 
-random.shuffle(train_imgs)
-
-num_imgs = len(train_imgs)
-
-print(f'Num train samples {len(train_imgs)}')
-print(f'Num val samples {len(val_imgs)}')
+print(f'Num train samples {total_train_records}')
+print(f'Num val samples {total_val_records}')
 
 #since we are using square images, we know the image size we will be scaling to
 input_shape_img = (C.im_size, C.im_size, 3)
@@ -106,13 +103,6 @@ model_classifier = Model([shared_layers.input, roi_input], classifier)
 model_all = Model([shared_layers.input, roi_input], rpn[:2] + classifier)
 
 print('Models sucessfully built.')
-#find the feature map dimensions
-(feature_map_width, feature_map_height) = nn.get_feature_map_size(model_rpn)
-
-#Create the data generators
-data_gen_train = data_generators.get_anchor_gt(train_imgs, class_mapping, feature_map_width, feature_map_height, mode='train')
-data_gen_val = data_generators.get_anchor_gt(val_imgs, class_mapping, feature_map_width, feature_map_height, mode='val')
-
 
 try:
     if (C.input_weight_path == None):
@@ -129,8 +119,11 @@ optimizer = Adam()
 model_rpn.compile(optimizer=optimizer, loss=[losses.rpn_loss_cls(num_anchors), losses.rpn_loss_regr(num_anchors)])
 model_all.compile(optimizer=optimizer, loss=[losses.rpn_loss_cls(num_anchors), losses.rpn_loss_regr(num_anchors), losses.class_loss_cls, losses.class_loss_regr(num_ids-1)], metrics={f'dense_class_{num_ids}': 'accuracy'})
 
+epoch_length = 0
+for batch in train_dataset:
+    epoch_length += 1
 
-epoch_length = len(train_imgs)
+#epoch_length = total_train_records
 num_epochs = int(C.num_epochs)
 iter_num = 0
 
