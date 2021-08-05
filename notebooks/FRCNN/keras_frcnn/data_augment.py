@@ -1,4 +1,3 @@
-import cv2
 import numpy as np
 import copy
 
@@ -18,7 +17,7 @@ def augment(img_data, config, augment=True):
         rows, cols = img.shape[:2]
 
         if config.use_horizontal_flips and np.random.randint(0, 2) == 0:
-            img = cv2.flip(img, 1)
+            img = np.flip(img, 1)
             for bbox in img_data_aug['bboxes']:
                 x1 = bbox['x1']
                 x2 = bbox['x2']
@@ -26,7 +25,7 @@ def augment(img_data, config, augment=True):
                 bbox['x1'] = cols - x2
 
         if config.use_vertical_flips and np.random.randint(0, 2) == 0:
-            img = cv2.flip(img, 0)
+            img = np.flip(img, 0)
             for bbox in img_data_aug['bboxes']:
                 y1 = bbox['y1']
                 y2 = bbox['y2']
@@ -37,12 +36,12 @@ def augment(img_data, config, augment=True):
             angle = np.random.choice([0,90,180,270],1)[0]
             if angle == 270:
                 img = np.transpose(img, (1,0,2))
-                img = cv2.flip(img, 0)
+                img = np.flip(img, 0)
             elif angle == 180:
-                img = cv2.flip(img, -1)
+                img = np.flip(img, None)
             elif angle == 90:
                 img = np.transpose(img, (1,0,2))
-                img = cv2.flip(img, 1)
+                img = np.flip(img, 1)
             elif angle == 0:
                 pass
 

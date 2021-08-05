@@ -1,6 +1,74 @@
-import cv2
-import numpy as np
 import tensorflow as tf
+import glob
+from . import config
+
+
+def batch_processor(batch):
+    
+    C = config.Config()  
+    label_file = glob.glob(C.train_path + '/*labels.txt')
+    
+    classes_count = {}
+    imgs = {}
+    class_mapping = {}
+    #read in the class labels
+    class_dict = {}
+    file = open(label_file[0], "r")
+
+    #create a class label dictionary
+    for line in file:
+        key, value = line.split(':')
+        class_dict[int(key)] = value.strip()
+        
+        
+    for im in range(batch['image'].numpy().shape[0]):
+
+        class_id = tf.sparse.to_dense(batch['image/object/class/label']).numpy()[im]
+        
+        image = batch['image'].numpy()[im]
+        (w, h) = image.shape[:2]
+        
+        x1 = (tf.sparse.to_dense(batch['image/object/bbox/xmin']).numpy()[im] * w).round().astype(int)
+        x2 = (tf.sparse.to_dense(batch['image/object/bbox/xmax']).numpy()[im] * w).round().astype(int)
+        y1 = (tf.sparse.to_dense(batch['image/object/bbox/ymin']).numpy()[im] * h).round().astype(int)
+        y2 = (tf.sparse.to_dense(batch['image/object/bbox/ymax']).numpy()[im] * h).round().astype(int)
+        
+        #drop 0s due to the sparse to dense
+        zeroes_map = class_id != 0
+        class_id = class_id[zeroes_map]
+        x1 = x1[zeroes_map]
+        x2 = x2[zeroes_map]
+        y1 = y1[zeroes_map]
+        y2 = y2[zeroes_map]
+        
+        try:
+            assert len(class_id) == len(x1) == len(x2) == len(y1) == len(y2)
+        except Exception as e:
+            print(f'Exception: {e}')
+            
+        class_name = []
+        
+        for cls in range(len(class_id)):
+            class_name.append(class_dict[class_id[cls]])
+    
+        for i in range(len(class_name)):
+            #Convert from class id numbers to text
+            for cls in range(len(class_id)):
+                class_name.append(class_dict[class_id[cls]])
+                                   
+            if im not in imgs:
+                imgs[im] = {}
+                imgs[im]['image_number'] = im
+                (rows,cols) = image.shape[:2]
+                
+                imgs[im]['width'] = cols
+                imgs[im]['height'] = rows
+                imgs[im]['bboxes'] = []
+                imgs[im]['rawimage'] = image
+            
+            imgs[im]['bboxes'].append({'class': class_name[i], 'x1': x1[i], 'x2': x2[i], 'y1': y1[i], 'y2': y2[i]})
+
+    return imgs
 
 
 def get_data(input_path, data_type):
@@ -10,27 +78,29 @@ def get_data(input_path, data_type):
     classes_count = {}
 
     class_mapping = {}
+    
+    label_file = glob.glob(input_path + '/*labels.txt')
+    
+    record_file = glob.glob(input_path + "/*" + data_type + "*.record")
+    
+    C = config.Config()  
 
-    visualise = True
-    
-    input_path = input_path + r'\xview_' + data_type + '_sample.record'
-    
-    
     #read in the class labels
     class_dict = {}
-    file = open(r'C:\Data_drive\Data\xview_class_labels.txt', "r")
+    file = open(label_file[0], "r")
 
     #create a class label dictionary
     for line in file:
         key, value = line.split(':')
         class_dict[int(key)] = value.strip()
         
-    #for debugging within tf.functions
+    #for debugging within tf.function
+    '''
     import pdb
     tf.data.experimental.enable_debug_mode()
+    '''
     
-    
-    with open(input_path,'r') as f:
+    with open(record_file[0],'r') as f:
 
         print('Parsing annotation files')
 
@@ -53,8 +123,8 @@ def get_data(input_path, data_type):
             #pdb.Pdb(nosigint=True).set_trace()
             features = tf.io.parse_single_example(example, feature_description)
             raw_image = tf.image.decode_jpeg(features['image/encoded'], channels=3)
-            features["image"] = tf.cast(tf.image.resize(raw_image, size=(500, 500)), tf.uint8)
-
+            features["image"] = tf.cast(tf.image.resize(raw_image, size=(C.im_size, C.im_size)), tf.uint8)
+            
             features.pop("image/encoded")
             features.pop("image/format")
             features.pop("image/height")
@@ -77,18 +147,23 @@ def get_data(input_path, data_type):
 
         
         
-        batch_size = 5
-        TFdataset = get_dataset(input_path, batch_size)
+        batch_size = C.batch_size
+        TFdataset = get_dataset(input_path + "/*" + data_type + "*.record", batch_size)
 
+        record_file = glob.glob(input_path + "/*" + data_type + "*.record")
         
-        total_records = sum(1 for _ in tf.data.TFRecordDataset(input_path))
+        total_records = sum(1 for _ in tf.data.TFRecordDataset(record_file[0]))
         print("total records in the TFrecord file is : " + str(total_records))
         
+        if False:
+            return TFdataset, total_records
+    #this code is used when running a generator and cant run on very large datasets-----------------------------------------------------------------------------------
+        
         #find the number of classes in the tfrecord file
-        full_set = set()
         filename = -1
         for example in TFdataset:  # example is `{'image': tf.Tensor, 'label': tf.Tensor}`
-            #loop through each image in the batch
+            
+            #loop through each image in the batch            
             for im in range(example['image'].numpy().shape[0]):
                 
                 filename  = filename + 1
@@ -116,8 +191,6 @@ def get_data(input_path, data_type):
                 except Exception as e:
                     print(f'Exception: {e}')
 
-                    
-            
                 class_name = []
                 
                 #Convert from class id numbers to text
@@ -153,7 +226,7 @@ def get_data(input_path, data_type):
                         continue
                     
                     all_imgs[filename]['bboxes'].append({'class': class_name[i], 'x1': x1[i], 'x2': x2[i], 'y1': y1[i], 'y2': y2[i]})
-    
+            
             all_data = []
             for key in all_imgs:
                 all_data.append(all_imgs[key])
@@ -168,4 +241,5 @@ def get_data(input_path, data_type):
             
         return all_data, classes_count, class_mapping, TFdataset
 
+        
 
