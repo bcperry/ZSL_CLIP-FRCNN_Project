@@ -1,6 +1,7 @@
 import tensorflow as tf
 import glob
 from . import config
+import numpy
 
 
 def batch_processor(batch):
@@ -95,10 +96,10 @@ def get_data(input_path, data_type):
         class_dict[int(key)] = value.strip()
         
     #for debugging within tf.function
-    '''
-    import pdb
-    tf.data.experimental.enable_debug_mode()
-    '''
+
+    #import pdb
+    #tf.data.experimental.enable_debug_mode()
+
     
     with open(record_file[0],'r') as f:
 
@@ -124,6 +125,7 @@ def get_data(input_path, data_type):
             features = tf.io.parse_single_example(example, feature_description)
             raw_image = tf.image.decode_jpeg(features['image/encoded'], channels=3)
             features["image"] = tf.cast(tf.image.resize(raw_image, size=(C.im_size, C.im_size)), tf.uint8)
+            features['roi_input'] =  numpy.zeros((C.num_rois,4))
             
             features.pop("image/encoded")
             features.pop("image/format")

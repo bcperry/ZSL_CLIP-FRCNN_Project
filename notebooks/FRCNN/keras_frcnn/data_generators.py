@@ -5,7 +5,6 @@ from . import data_augment
 import threading
 import itertools
 from . import config
-from . import resnet as nn
 
 def union(au, bu, area_intersection):
     area_a = (au[2] - au[0]) * (au[3] - au[1])
@@ -278,12 +277,13 @@ def calc_rpn(img_data, output_width, output_height):
     num_regions = 256
 
     if len(pos_locs[0]) > num_regions/2:
-        val_locs = random.sample(range(len(pos_locs[0])), len(pos_locs[0]) - num_regions/2)
+        val_locs = random.sample(range(len(pos_locs[0])), int(len(pos_locs[0]) - num_regions/2))
         y_is_box_valid[0, pos_locs[0][val_locs], pos_locs[1][val_locs], pos_locs[2][val_locs]] = 0
         num_pos = num_regions/2
 
     if len(neg_locs[0]) + num_pos > num_regions:
-        val_locs = random.sample(range(len(neg_locs[0])), len(neg_locs[0]) - num_pos)
+        #import pdb ; pdb.set_trace()  #uncomment to start debugger here
+        val_locs = random.sample(range(len(neg_locs[0])), int(len(neg_locs[0]) - num_pos))
         y_is_box_valid[0, neg_locs[0][val_locs], neg_locs[1][val_locs], neg_locs[2][val_locs]] = 0
 
     y_rpn_cls = np.concatenate([y_is_box_valid, y_rpn_overlap], axis=1)
@@ -319,11 +319,13 @@ def threadsafe_generator(f):
 def calc_targets(x_img, img_data, feature_map_width, feature_map_height):
     C = config.Config()
     
+    y_rpn_cls, y_rpn_regr = calc_rpn(img_data, feature_map_width, feature_map_height)
+    '''
     try:
         y_rpn_cls, y_rpn_regr = calc_rpn(img_data, feature_map_width, feature_map_height)
     except:
-        print('Error calculating the truth values for the rpn')
-
+        print('Error calculating the truth values for the rpn in data generators calc_targets function')
+    '''
     # Zero-center by mean pixel, and preprocess image
 
     x_img = x_img[:,:, (2, 1, 0)]  # BGR -> RGB

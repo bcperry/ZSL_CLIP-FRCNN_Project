@@ -1,6 +1,3 @@
-from keras import backend as K
-import math
-
 class Config:
 
     def __init__(self):
@@ -11,7 +8,7 @@ class Config:
         self.train_path = r'C:\Data_drive\workspace\FRCNN'
         
         #number of epochs to train
-        self.num_epochs = 15
+        self.num_epochs = 1
         
         # number of ROIs at once
         self.num_rois = 200
@@ -37,7 +34,7 @@ class Config:
   
         # anchor box information
         self.anchor_box_scales = [5, 10, 20, 50, 100]
-        self.anchor_box_ratios = [[1, 1], [1./math.sqrt(2), 2./math.sqrt(2)], [2./math.sqrt(2), 1./math.sqrt(2)]]
+        self.anchor_box_ratios = [[1, 1], [1, 2], [2, 1]]
   
         # size to resize the smallest side of the image
         self.im_size = 500

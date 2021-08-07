@@ -4,23 +4,17 @@ Created on Tue Jul 27 14:09:54 2021
 
 @author: Blaine Perry
 """
-
-
-import numpy as np
 import tensorflow as tf
 from tensorflow import keras
-import keras_frcnn.roi_helpers as roi_helpers
-import random
+import numpy as np
+
 from tensorflow.keras import backend as K
 from tensorflow.keras.losses import categorical_crossentropy
 from . import resnet as nn
-from . import data_generators
 from . import train_helpers
+from . import config
+from keras_frcnn.tfrecord_parser import batch_processor
 
-
-
-import tensorflow.python.ops.numpy_ops.np_config as npc
-npc.enable_numpy_behavior()
 
 
 class FRCNN(keras.Model):
@@ -32,14 +26,16 @@ class FRCNN(keras.Model):
         self.class_mapping = train_helpers.get_class_map()
         self.feature_map_width = feature_map_width
         self.feature_map_height = feature_map_height
+        #self.loss_tracker = keras.metrics.Mean(name="loss")
     
     def call(self, X, training=False):
-
-        return self.frcnn(X)
+        
+        return self.frcnn(X, training=training)
     
     def compute_loss(self, frcnn_pred, frcnn_targets):
         
-        num_anchors = len(self.C.anchor_box_scales) * len(self.C.anchor_box_ratios)
+        num_anchors = self.frcnn.output_shape[0][3]
+        num_classes = self.frcnn.output_shape[2][2]
         
         lambda_rpn_regr = 1.0
         lambda_rpn_class = 1.0
@@ -59,103 +55,99 @@ class FRCNN(keras.Model):
        			y_true[:, :, :, :4 * num_anchors] * (x_bool * (0.5 * x * x) + (1 - x_bool) * (x_abs - 0.5))) / K.sum(epsilon + y_true[:, :, :, :4 * num_anchors])
         
        	def rpn_loss_cls(y_true, y_pred):
-       		return lambda_rpn_class * K.sum(y_true[:, :, :, :num_anchors] * K.binary_crossentropy(y_pred[:, :, :, :], y_true[:, :, :, num_anchors:])) / K.sum(epsilon + y_true[:, :, :, :num_anchors])
+               return lambda_rpn_class * K.sum(y_true[:, :, :, :num_anchors] * K.binary_crossentropy(y_pred[:, :, :, :], y_true[:, :, :, num_anchors:])) / K.sum(epsilon + y_true[:, :, :, :num_anchors])
 
-       	def class_loss_regr(y_true, y_pred):
-            #num_classes - 1 since we dont count the background class
-       		x = y_true[:, :, 4*self.num_classes-1:] - y_pred
-       		x_abs = K.abs(x)
-       		x_bool = K.cast(K.less_equal(x_abs, 1.0), 'float32')
-       		return lambda_cls_regr * K.sum(y_true[:, :, :4*self.num_classes-1] * (x_bool * (0.5 * x * x) + (1 - x_bool) * (x_abs - 0.5))) / K.sum(epsilon + y_true[:, :, :4*self.num_classes-1])
+        def class_loss_regr(y_true, y_pred):
+            def class_loss_regr_fixed_num(y_true, y_pred):
+                #subtract 1 here to take out the background class
+                num_classes_cls_regr = num_classes - 1
+                
+                x = y_true[:, :, 4*num_classes_cls_regr:] - y_pred
+                x_abs = K.abs(x)
+                x_bool = K.cast(K.less_equal(x_abs, 1.0), 'float32')
+                return lambda_cls_regr * K.sum(y_true[:, :, :4*num_classes_cls_regr] * (x_bool * (0.5 * x * x) + (1 - x_bool) * (x_abs - 0.5))) / K.sum(epsilon + y_true[:, :, :4*num_classes_cls_regr])
+            return class_loss_regr_fixed_num(y_true, y_pred)
+
         
         def class_loss_cls(y_true, y_pred):
-        	return lambda_cls_class * K.mean(categorical_crossentropy(y_true[0, :, :], y_pred[0, :, :]))
+            return lambda_cls_class * K.mean(categorical_crossentropy(y_true[0, :, :], y_pred[0, :, :]))
         
-        rpn_loss_cls = rpn_loss_cls()
-        rpn_loss_regr = rpn_loss_regr()
-        class_loss_cls = class_loss_cls()
-        class_loss_regr = class_loss_regr()
+        rpn_loss_cls = rpn_loss_cls(frcnn_targets[0], frcnn_pred[0])
+        rpn_loss_regr = rpn_loss_regr(frcnn_targets[1], frcnn_pred[1])
+        class_loss_cls = class_loss_cls(frcnn_targets[2], frcnn_pred[2])
+        class_loss_regr = class_loss_regr(frcnn_targets[3], frcnn_pred[3])
         
         
 
         return [rpn_loss_cls, rpn_loss_regr, class_loss_cls, class_loss_regr]
 
 
-    def train_step(self, data):
-        
-        if print(data['image'].shape[0]) is None:
-            data_2 = [data['image'], tf.compat.v1.placeholder(shape = [None, 200, 4], dtype='uint8')]
-        
+    def train_step(self, batch):
+        #if running in graph mode, we will through the training step with a placeholder to build the graph
+        #this currently does not work
+        if batch['image'].shape[0] is None:
+            #roi_input_shape = [None, self.frcnn.input_shape[1][1], self.frcnn.input_shape[1][2]]
+            
+            Y_rpn_cls_shape = [None, self.frcnn.output_shape[0][1], self.frcnn.output_shape[0][2], 2 * self.frcnn.output_shape[0][3]]       
+            Y_rpn_reg_shape = [None, self.frcnn.output_shape[1][1], self.frcnn.output_shape[1][2], 2 * self.frcnn.output_shape[1][3]] 
+            Y_cnn_cls_shape = [None, self.frcnn.output_shape[2][1], self.frcnn.output_shape[2][2]] 
+            Y_cnn_reg_shape = [None, self.frcnn.output_shape[3][1], 2 * self.frcnn.output_shape[3][2]] 
+            
+            
+            #X = [batch['image'], tf.compat.v1.placeholder(shape = roi_input_shape, dtype='float32')]
+            X = [batch['image'], batch['roi_input']]
+            
+
+            Y = [tf.compat.v1.placeholder(shape = Y_rpn_cls_shape, dtype='float32'),
+                 tf.compat.v1.placeholder(shape = Y_rpn_reg_shape, dtype='float32'),
+                 tf.compat.v1.placeholder(shape = Y_cnn_cls_shape, dtype='float32'),
+                 tf.compat.v1.placeholder(shape = Y_cnn_reg_shape, dtype='float32')]
         else:
-            rpn_pred = self.rpn(data['image'])
+            X = batch_processor(batch)
+            C = config.Config()
+            #initialize new X and img_data 
+            X_temp = np.zeros(shape=(len(X),C.im_size, C.im_size, 3),dtype='uint8')
+            img_data_temp = []
+            for i in range(len(X)):
+                img_data_temp.append(X[i])
+                X_temp[i] = X[i]['rawimage']
             
-            img_data = data_generators.batch_processor(data)
+            X = X_temp
+            img_data = img_data_temp
             
-            #R input and output are in feature space
-            R = roi_helpers.rpn_to_roi(rpn_pred[0], rpn_pred[1], use_regr=True, overlap_thresh=0.1, max_boxes=900)
+            P_rpn = self.rpn(X, training = False)
+
+            X, Y, pos_samples, discard = train_helpers.second_stage_helper(X, P_rpn, img_data)
 
             
-            # note: calc_iou converts from (x1,y1,x2,y2) to (x,y,w,h) format
-            X2, Y1, Y2, IouS = roi_helpers.calc_iou(R, img_data, self.C, self.class_mapping)
-            
-            if X2 is None:
-                return None
-    
-    
-            neg_samples = np.where(Y1[0, :, -1] == 1)
-            pos_samples = np.where(Y1[0, :, -1] == 0)
-            
-            neg_samples = list(neg_samples[0])
-            pos_samples = list(pos_samples[0])
-            
-    
-            if self.C.num_rois > 1:
-                selected_pos_samples = []
-                selected_neg_samples= []
-                
-                if len(pos_samples) < self.C.num_rois//2:
-                    selected_pos_samples = pos_samples
-                else:
-                    selected_pos_samples = np.random.choice(pos_samples, self.C.num_rois//2, replace=False)
-                #if there are no negative samples, use only positive samples
-                if len(neg_samples) == 0:
-                    selected_pos_samples = np.random.choice(pos_samples, self.C.num_rois, replace=True).tolist()
-                else:
-                #add negative samples to fill out the total necessary
-                    try:
-                        selected_neg_samples = np.random.choice(neg_samples, self.C.num_rois - len(selected_pos_samples), replace=False).tolist()
-                    except:
-                        selected_neg_samples = np.random.choice(neg_samples, self.C.num_rois - len(selected_pos_samples), replace=True).tolist()
-    
-                sel_samples = selected_pos_samples + selected_neg_samples
-            else:
-                # in the extreme case where num_rois = 1, we pick a random pos or neg sample
-                selected_pos_samples = pos_samples
-                selected_neg_samples = neg_samples
-                if np.random.randint(0, 2):
-                    sel_samples = random.choice(neg_samples)
-                else:
-                    sel_samples = random.choice(pos_samples)
-                    
-            #cast Y1 and Y2 to float32 in case there are no positive samples in the selection
-            Y1 = Y1.astype('float32')
-            Y2 = Y2.astype('float32')
-            
-            frcnn_targets = [Y[0], Y[1], Y1[:, sel_samples, :], Y2[:, sel_samples, :]]
-                
         with tf.GradientTape() as tape:
             # Forward pass
-            frcnn_pred = self(data_2, training=True)
-            loss = self.compute_loss(frcnn_pred, frcnn_targets)
+            frcnn_pred = self(X, training=True)
+            loss = self.compute_loss(frcnn_pred, Y)
         # Backward pass
         gradients = tape.gradient(loss, self.trainable_variables)
         self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
         # Monitor loss
-        self.loss_tracker.update_state(loss)
-        return {"loss": self.loss_tracker.result()}
+        #self.loss_tracker.update_state(loss)
+        return {"rpn_loss_cls": loss[0].numpy(), "rpn_loss_regr": loss[1].numpy(), "class_loss_cls": loss[2].numpy(), "class_loss_regr": loss[3].numpy()}
 
-    def test_step(self, features):
-        caption_embeddings, image_embeddings = self(features, training=False)
-        loss = self.compute_loss(caption_embeddings, image_embeddings)
-        self.loss_tracker.update_state(loss)
-        return {"loss": self.loss_tracker.result()}
+    def test_step(self, batch):
+        X = batch_processor(batch)
+        C = config.Config()
+        #initialize new X and img_data 
+        X_temp = np.zeros(shape=(len(X),C.im_size, C.im_size, 3),dtype='uint8')
+        img_data_temp = []
+        for i in range(len(X)):
+            img_data_temp.append(X[i])
+            X_temp[i] = X[i]['rawimage']
+            
+        X = X_temp
+        img_data = img_data_temp
+            
+        P_rpn = self.rpn(X, training = False)
+
+        X, Y, pos_samples, discard = train_helpers.second_stage_helper(X, P_rpn, img_data)
+        
+        frcnn_pred = self(X, training=True)
+        loss = self.compute_loss(frcnn_pred, Y)
+        return {"rpn_loss_cls": loss[0].numpy(), "rpn_loss_regr": loss[1].numpy(), "class_loss_cls": loss[2].numpy(), "class_loss_regr": loss[3].numpy()}

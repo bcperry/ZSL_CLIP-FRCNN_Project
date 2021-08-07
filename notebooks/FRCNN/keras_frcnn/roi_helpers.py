@@ -78,13 +78,14 @@ def calc_iou(R, img_data):
             else:
                 print('roi = {}'.format(best_iou))
                 raise RuntimeError
-
+        
+        num_classes = class_mapping[max(class_mapping, key=class_mapping.get)] + 1
         class_num = class_mapping[cls_name]
-        class_label = (class_mapping['bg']) * [0] #use bg here because its always the final class
-        class_label[class_num-1] = 1
+        class_label = (num_classes) * [0] #add 1 here to account for the 0 class
+        class_label[class_num] = 1
         y_class_num.append(copy.deepcopy(class_label))
-        coords = [0] * 4 * (class_mapping['bg'] - 1)
-        labels = [0] * 4 * (class_mapping['bg'] - 1)
+        coords = [0] * 4 * (num_classes - 1)
+        labels = [0] * 4 * (num_classes - 1)
         if cls_name != 'bg':
             label_pos = 4 * class_num
             sx, sy, sw, sh = C.classifier_regr_std
@@ -232,6 +233,11 @@ def non_max_suppression_fast(boxes, probs, overlap_thresh=0.9, max_boxes=300):
 
 def rpn_to_roi(rpn_layer, regr_layer, use_regr=True, max_boxes=300,overlap_thresh=0.9):
     C = config.Config()
+    
+    
+    import tensorflow.python.ops.numpy_ops.np_config as np_config
+    np_config.enable_numpy_behavior()
+
 
     regr_layer = regr_layer / C.std_scaling
    
