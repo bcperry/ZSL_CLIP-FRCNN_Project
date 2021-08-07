@@ -12,6 +12,7 @@ from . import config
 from . import data_generators
 import glob
 
+
 def get_class_map():
     C = config.Config()
     
@@ -24,16 +25,19 @@ def get_class_map():
     for line in file:
         key, value = line.split(':')
         class_mapping[value.strip()] = int(key)
-    
-    largest_key = class_mapping[max(class_mapping, key=class_mapping.get)]
-    
+
     if 'bg' not in class_mapping:
         #add the background class
-        class_mapping['bg'] = largest_key + 1
+        if class_mapping[min(class_mapping, key=class_mapping.get)] != 0:
+            class_mapping['bg'] = 0
+        else:
+            print('a class with id 0 exists')
+            exit()
     
     return class_mapping
 
-def second_stage_helper(X, model_rpn, img_data=None):
+def second_stage_helper(X, P_rpn, img_data):
+    
     
     C = config.Config()
     class_mapping = get_class_map()
@@ -47,29 +51,17 @@ def second_stage_helper(X, model_rpn, img_data=None):
     anchor_sizes = C.anchor_box_scales
     anchor_ratios = C.anchor_box_ratios
     num_anchors = len(anchor_sizes) * len(anchor_ratios)
-    
-    #if sent in as a batch, X is the img_data dont pass img_data
-    if img_data == None:
-        #initialize new X and img_data 
-        X_temp = np.zeros(shape=(len(X),C.im_size, C.im_size, 3),dtype='uint8')
-        img_data_temp = []
-        for i in range(len(X)):
-            img_data_temp.append(X[i])
-            X_temp[i] = X[i]['rawimage']
-            
-        X = X_temp
-        img_data = img_data_temp
-    
 
 
-    P_rpn = model_rpn.predict_on_batch(X)
+    #P_rpn = model_rpn.predict_on_batch(X)
+    #test = model_all.predict_on_batch([X, batch['roi_input']])
     
     Y1_rpn_batch = np.zeros(shape=(len(X), P_rpn[0].shape[1], P_rpn[0].shape[2], num_anchors * 2), dtype='float32')
     Y2_rpn_batch = np.zeros(shape=(len(X), P_rpn[0].shape[1], P_rpn[0].shape[2], num_anchors * 8), dtype='float32')
     
     X2_batch = np.zeros(shape=(len(X), C.num_rois, 4), dtype='float32')
-    Y1_batch = np.zeros(shape=(len(X), C.num_rois, num_ids), dtype='float32')
-    Y2_batch = np.zeros(shape=(len(X), C.num_rois, (num_ids-1)*8), dtype='float32')
+    Y1_batch = np.zeros(shape=(len(X), C.num_rois, num_ids+1), dtype='float32')
+    Y2_batch = np.zeros(shape=(len(X), C.num_rois, (num_ids)*8), dtype='float32')
 
     for im in range(X.shape[0]):
         #get the rpn targets
@@ -136,13 +128,13 @@ def second_stage_helper(X, model_rpn, img_data=None):
         Y1_batch[im] = Y1[0]
         Y2_batch[im] = Y2[0]
         
-        #if any of the images in the batch fail to predict regions, drop them from the batch
-        if len(discard) > 0:
-            X = np.delete(X, discard, 0)
-            X2_batch = np.delete(X2_batch, discard, 0)
-            Y1_rpn_batch = np.delete(Y1_rpn_batch, discard, 0)
-            Y2_rpn_batch = np.delete(Y2_rpn_batch, discard, 0)
-            Y1_batch = np.delete(Y1_batch, discard, 0)
-            Y2_batch = np.delete(Y2_batch, discard, 0)
+    #if any of the images in the batch fail to predict regions, drop them from the batch
+    if len(discard) > 0:
+        X = np.delete(X, discard, 0)
+        X2_batch = np.delete(X2_batch, discard, 0)
+        Y1_rpn_batch = np.delete(Y1_rpn_batch, discard, 0)
+        Y2_rpn_batch = np.delete(Y2_rpn_batch, discard, 0)
+        Y1_batch = np.delete(Y1_batch, discard, 0)
+        Y2_batch = np.delete(Y2_batch, discard, 0)
     
     return [X, X2_batch], [Y1_rpn_batch, Y2_rpn_batch, Y1_batch, Y2_batch], batch_pos_samples, discard
