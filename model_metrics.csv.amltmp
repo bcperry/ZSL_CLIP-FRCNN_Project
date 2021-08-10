@@ -1,0 +1,6 @@
+,,,,,Training Accuracy Measurements,,,,,Test Accuracy Measurements,,
+Date,Time to train,Model,Data Description,Training Notes,Multiclass accuracy,mAP,F1,AUC,other class specific accuracy measurements…,mAP of Zero Shot class,Accuracy of Zero Shot Class,etc
+,,Standard Baseline,e.g. Xview,"e.g. tensorflow api, 70/30 training split, transfer learning method with 10 epochs, learning rate, batch size etc. ",,,,,,,,
+,,Standard + Semantic embedding,e.g. Xview + Dota etc.,,,,,,,,,
+,,Zero-Shot Easy w/o sedans,,,,,,,,,,
+,,Zero-Shot Hard w/o cars,,,,,,,,,,

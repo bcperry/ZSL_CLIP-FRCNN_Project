@@ -176,14 +176,14 @@ class DualEncoder(keras.Model):
     def call(self, features, training=False):
         # Place each encoder on a separate GPU (if available).
         # TF will fallback on available devices if there are fewer than 2 GPUs.
-
+        
         with tf.device("/gpu:0"):
             # Get the embeddings for the captions.
             caption_embeddings = text_encoder(features["caption"], training=training)
         with tf.device("/gpu:1"):
             # Get the embeddings for the images.
             image_embeddings = vision_encoder(features["image"], training=training)
-
+          
         return caption_embeddings, image_embeddings
 
     def compute_loss(self, caption_embeddings, image_embeddings):
@@ -304,3 +304,9 @@ vision_encoder.save("./outputs/model/vision_encoder")
 text_encoder.save("./outputs/model/text_encoder")
 print("model saved in ./outputs/model folder")
 
+
+
+
+
+
+    
