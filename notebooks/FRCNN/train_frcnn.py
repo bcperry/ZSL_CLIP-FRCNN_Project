@@ -46,13 +46,13 @@ if model_path_regex.group(2) != '.hdf5':
     exit(1)
 
 
-train_dataset, total_train_records = get_data(C.train_path, 'train', C)
-val_dataset, total_val_records = get_data(C.train_path, 'test', C)
+train_dataset, total_train_records = get_data('train', C)
+val_dataset, total_val_records = get_data('test', C)
 
-class_mapping = train_helpers.get_class_map(C)
+C.class_mapping = train_helpers.get_class_map(C)
 
 #find the largest class id and add 1 for the background class
-num_ids = class_mapping[max(class_mapping, key=class_mapping.get)] + 1
+num_ids = C.class_mapping[max(C.class_mapping, key=C.class_mapping.get)] + 1
 
 print(f'Num train samples {total_train_records}')
 print(f'Num val samples {total_val_records}')
@@ -103,6 +103,7 @@ print('Starting training')
 vis = True
 
 # start an Azure ML run
+
 run = Run.get_context()
 
 class LogRunMetrics(Callback):

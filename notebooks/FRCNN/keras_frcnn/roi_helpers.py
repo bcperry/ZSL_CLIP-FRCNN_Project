@@ -7,12 +7,9 @@ from . import config
 from . import train_helpers
 
 
-def calc_iou(R, img_data):
-    
-    
-    C = config.Config()
+def calc_iou(C, R, img_data):
 
-    class_mapping = train_helpers.get_class_map()
+    class_mapping = C.class_mapping
    
     bboxes = img_data['bboxes']
     (width, height) = (img_data['width'], img_data['height'])
@@ -231,8 +228,7 @@ def non_max_suppression_fast(boxes, probs, overlap_thresh=0.9, max_boxes=300):
 	return boxes, probs
 
 
-def rpn_to_roi(rpn_layer, regr_layer, use_regr=True, max_boxes=300,overlap_thresh=0.9):
-    C = config.Config()
+def rpn_to_roi(C, rpn_layer, regr_layer, use_regr=True, max_boxes=300,overlap_thresh=0.9):
     
     
     import tensorflow.python.ops.numpy_ops.np_config as np_config

@@ -74,9 +74,8 @@ class SampleSelector:
             return True
 
 
-def calc_rpn(img_data, output_width, output_height):
-    
-    C = config.Config()
+def calc_rpn(C, img_data, output_width, output_height):
+
     
     downscale = float(C.rpn_stride)
     anchor_sizes = C.anchor_box_scales
@@ -316,10 +315,9 @@ def threadsafe_generator(f):
         return threadsafe_iter(f(*a, **kw))
     return g
 
-def calc_targets(x_img, img_data, feature_map_width, feature_map_height):
-    C = config.Config()
-    
-    y_rpn_cls, y_rpn_regr = calc_rpn(img_data, feature_map_width, feature_map_height)
+def calc_targets(C, x_img, img_data, feature_map_width, feature_map_height):
+
+    y_rpn_cls, y_rpn_regr = calc_rpn(C, img_data, feature_map_width, feature_map_height)
     '''
     try:
         y_rpn_cls, y_rpn_regr = calc_rpn(img_data, feature_map_width, feature_map_height)
@@ -348,8 +346,7 @@ def calc_targets(x_img, img_data, feature_map_width, feature_map_height):
     return np.copy(x_img), [np.copy(y_rpn_cls), np.copy(y_rpn_regr)], img_data
 
 
-def get_anchor_gt(all_img_data, class_count, feature_map_width, feature_map_height, mode='train'):
-    C = config.Config()
+def get_anchor_gt(C, all_img_data, class_count, feature_map_width, feature_map_height, mode='train'):
     
     sample_selector = SampleSelector(class_count)
 
