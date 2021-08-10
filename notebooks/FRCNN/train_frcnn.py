@@ -9,6 +9,7 @@ from tensorflow.keras.layers import Input
 from tensorflow.keras.models import Model
 from tensorflow.keras.applications.resnet50 import ResNet50
 from tensorflow.keras import callbacks as callbacks
+from tensorflow.keras.callbacks import Callback
 
 from keras_frcnn import config
 from keras_frcnn import losses as losses
