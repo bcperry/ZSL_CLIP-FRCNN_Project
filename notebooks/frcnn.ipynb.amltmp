@@ -62,7 +62,7 @@
           }
         },
         "gather": {
-          "logged": 1628611475675
+          "logged": 1628708173945
         }
       },
       "id": "015b9335-27d6-4664-99e5-197bc702e0f2"
@@ -81,12 +81,12 @@
           "output_type": "stream",
           "name": "stderr",
           "text": [
-            "Failure while loading azureml_run_type_providers. Failed to load entrypoint hyperdrive = azureml.train.hyperdrive:HyperDriveRun._from_run_dto with exception (azure-mgmt-resource 18.0.0 (/anaconda/envs/azureml_py38/lib/python3.8/site-packages), Requirement.parse('azure-mgmt-resource<15.0.0,>=1.2.1'), {'azureml-core'}).\n",
+            "Failure while loading azureml_run_type_providers. Failed to load entrypoint hyperdrive = azureml.train.hyperdrive:HyperDriveRun._from_run_dto with exception (azure-mgmt-storage 18.0.0 (/anaconda/envs/azureml_py38/lib/python3.8/site-packages), Requirement.parse('azure-mgmt-storage<16.0.0,>=1.5.0'), {'azureml-core'}).\n",
             "Failure while loading azureml_run_type_providers. Failed to load entrypoint automl = azureml.train.automl.run:AutoMLRun._from_run_dto with exception (pyarrow 4.0.1 (/anaconda/envs/azureml_py38/lib/python3.8/site-packages), Requirement.parse('pyarrow<4.0.0,>=0.17.0'), {'azureml-dataset-runtime'}).\n",
-            "Failure while loading azureml_run_type_providers. Failed to load entrypoint azureml.PipelineRun = azureml.pipeline.core.run:PipelineRun._from_dto with exception (azure-mgmt-resource 18.0.0 (/anaconda/envs/azureml_py38/lib/python3.8/site-packages), Requirement.parse('azure-mgmt-resource<15.0.0,>=1.2.1'), {'azureml-core'}).\n",
-            "Failure while loading azureml_run_type_providers. Failed to load entrypoint azureml.ReusedStepRun = azureml.pipeline.core.run:StepRun._from_reused_dto with exception (azure-mgmt-resource 18.0.0 (/anaconda/envs/azureml_py38/lib/python3.8/site-packages), Requirement.parse('azure-mgmt-resource<15.0.0,>=1.2.1'), {'azureml-core'}).\n",
-            "Failure while loading azureml_run_type_providers. Failed to load entrypoint azureml.StepRun = azureml.pipeline.core.run:StepRun._from_dto with exception (azure-mgmt-resource 18.0.0 (/anaconda/envs/azureml_py38/lib/python3.8/site-packages), Requirement.parse('azure-mgmt-resource<15.0.0,>=1.2.1'), {'azureml-core'}).\n",
-            "Failure while loading azureml_run_type_providers. Failed to load entrypoint azureml.scriptrun = azureml.core.script_run:ScriptRun._from_run_dto with exception (azure-mgmt-resource 18.0.0 (/anaconda/envs/azureml_py38/lib/python3.8/site-packages), Requirement.parse('azure-mgmt-resource<15.0.0,>=1.2.1')).\n"
+            "Failure while loading azureml_run_type_providers. Failed to load entrypoint azureml.PipelineRun = azureml.pipeline.core.run:PipelineRun._from_dto with exception (azure-mgmt-storage 18.0.0 (/anaconda/envs/azureml_py38/lib/python3.8/site-packages), Requirement.parse('azure-mgmt-storage<16.0.0,>=1.5.0'), {'azureml-core'}).\n",
+            "Failure while loading azureml_run_type_providers. Failed to load entrypoint azureml.ReusedStepRun = azureml.pipeline.core.run:StepRun._from_reused_dto with exception (azure-mgmt-storage 18.0.0 (/anaconda/envs/azureml_py38/lib/python3.8/site-packages), Requirement.parse('azure-mgmt-storage<16.0.0,>=1.5.0'), {'azureml-core'}).\n",
+            "Failure while loading azureml_run_type_providers. Failed to load entrypoint azureml.StepRun = azureml.pipeline.core.run:StepRun._from_dto with exception (azure-mgmt-storage 18.0.0 (/anaconda/envs/azureml_py38/lib/python3.8/site-packages), Requirement.parse('azure-mgmt-storage<16.0.0,>=1.5.0'), {'azureml-core'}).\n",
+            "Failure while loading azureml_run_type_providers. Failed to load entrypoint azureml.scriptrun = azureml.core.script_run:ScriptRun._from_run_dto with exception (azure-mgmt-storage 18.0.0 (/anaconda/envs/azureml_py38/lib/python3.8/site-packages), Requirement.parse('azure-mgmt-storage<16.0.0,>=1.5.0')).\n"
           ]
         },
         {
@@ -100,7 +100,7 @@
       "execution_count": 2,
       "metadata": {
         "gather": {
-          "logged": 1628611476568
+          "logged": 1628708174759
         }
       },
       "id": "78ea8765"
@@ -139,7 +139,7 @@
           }
         },
         "gather": {
-          "logged": 1628611476918
+          "logged": 1628708175112
         }
       },
       "id": "6d1345f7-78c9-43af-8c92-b9c279a9df02"
@@ -179,7 +179,7 @@
           }
         },
         "gather": {
-          "logged": 1628611477171
+          "logged": 1628708175409
         }
       },
       "id": "82d90ba9-a8bd-40dc-a883-06d72fae9428"
@@ -236,7 +236,7 @@
             "AmlCompute wait for completion finished\n",
             "\n",
             "Minimum number of nodes requested have been provisioned\n",
-            "{'currentNodeCount': 0, 'targetNodeCount': 1, 'nodeStateCounts': {'preparingNodeCount': 0, 'runningNodeCount': 0, 'idleNodeCount': 0, 'unusableNodeCount': 0, 'leavingNodeCount': 0, 'preemptedNodeCount': 0}, 'allocationState': 'Resizing', 'allocationStateTransitionTime': '2021-08-10T16:03:23.222000+00:00', 'errors': None, 'creationTime': '2021-07-08T18:36:44.988863+00:00', 'modifiedTime': '2021-07-08T18:37:15.441038+00:00', 'provisioningState': 'Succeeded', 'provisioningStateTransitionTime': None, 'scaleSettings': {'minNodeCount': 0, 'maxNodeCount': 4, 'nodeIdleTimeBeforeScaleDown': 'PT1800S'}, 'vmPriority': 'Dedicated', 'vmSize': 'STANDARD_NC12'}\n"
+            "{'currentNodeCount': 2, 'targetNodeCount': 1, 'nodeStateCounts': {'preparingNodeCount': 0, 'runningNodeCount': 0, 'idleNodeCount': 2, 'unusableNodeCount': 0, 'leavingNodeCount': 0, 'preemptedNodeCount': 0}, 'allocationState': 'Resizing', 'allocationStateTransitionTime': '2021-08-11T18:56:10.753000+00:00', 'errors': None, 'creationTime': '2021-07-08T18:36:44.988863+00:00', 'modifiedTime': '2021-07-08T18:37:15.441038+00:00', 'provisioningState': 'Succeeded', 'provisioningStateTransitionTime': None, 'scaleSettings': {'minNodeCount': 0, 'maxNodeCount': 4, 'nodeIdleTimeBeforeScaleDown': 'PT1800S'}, 'vmPriority': 'Dedicated', 'vmSize': 'STANDARD_NC12'}\n"
           ]
         }
       ],
@@ -253,7 +253,7 @@
           }
         },
         "gather": {
-          "logged": 1628611477395
+          "logged": 1628708175662
         }
       },
       "id": "0e762f3c-9e9f-4dc5-9d79-81ad089d1bf6"
@@ -316,10 +316,11 @@
       "source": [
         "from azureml.core import Environment\r\n",
         "\r\n",
-        "keras_env = Environment.from_conda_specification(name = 'keras-2.3.1', file_path = './conda_dependencies.yml')\r\n",
+        "keras_env = Environment.from_conda_specification(name = 'keras-env', file_path = './conda_dependencies.yml')\r\n",
         "\r\n",
-        "# Specify a GPU base image\r\n",
-        "keras_env.docker.base_image = 'mcr.microsoft.com/azureml/openmpi4.1.0-cuda11.0.3-cudnn8-ubuntu18.04:20210615.v1'"
+        "# load the string from a file.\r\n",
+        "keras_env.docker.base_image = None\r\n",
+        "keras_env.docker.base_dockerfile = \"./docker-FRCNN.txt\"\r\n"
       ],
       "outputs": [],
       "execution_count": 7,
@@ -335,7 +336,7 @@
           }
         },
         "gather": {
-          "logged": 1628611477842
+          "logged": 1628708176221
         }
       },
       "id": "c4514c85-4da0-47dd-8714-b529b8f07312"
@@ -363,6 +364,7 @@
       "source": [
         "from azureml.core import Dataset\r\n",
         "dataset = Dataset.get_by_name(ws, 'xview_tfrecords')\r\n",
+        "#dataset = Dataset.get_by_name(ws, 'xview_small_sample')\r\n",
         "\r\n",
         "# list the files referenced by the dataset\r\n",
         "dataset.to_path()\r\n"
@@ -390,7 +392,7 @@
           }
         },
         "gather": {
-          "logged": 1628611481732
+          "logged": 1628708179379
         }
       },
       "id": "b2b0f0b9-490a-471d-afd7-d9e40e3b0f8a"
@@ -423,7 +425,7 @@
           }
         },
         "gather": {
-          "logged": 1628611481992
+          "logged": 1628708179611
         }
       },
       "id": "bfd09fc2-441d-490d-bb8a-de3a121754b1"
@@ -447,7 +449,7 @@
           }
         },
         "gather": {
-          "logged": 1628611485123
+          "logged": 1628708181788
         }
       },
       "id": "5289f7f6-dd9c-44c6-ab78-87e405c86b98"

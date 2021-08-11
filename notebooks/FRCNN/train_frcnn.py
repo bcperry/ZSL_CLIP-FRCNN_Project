@@ -111,14 +111,14 @@ class LogRunMetrics(Callback):
     # callback at the end of every epoch
     def on_epoch_end(self, epoch, log):
         # log a value repeated which creates a list
-        run.log('Loss', log['val_loss'])
+        run.log('Classifier Loss', log['val_class_loss_cls'])
 
 #Azure note:
     # create a ./outputs/model folder in the compute target
     # files saved in the "./outputs" folder are automatically uploaded into run history
 os.makedirs('./outputs/model', exist_ok=True)
 
-checkpoint_path = './outputs/model/frcnn_epoch{epoch:02d}-loss{val_loss:.2f}.hdf5'
+checkpoint_path = './outputs/model/frcnn_epoch{epoch:02d}-loss{val_class_loss_cls:.2f}.hdf5'
 
 
 #set up callbacks
@@ -141,6 +141,12 @@ print('Primary training complete, starting fine tuning for 1 epoch.')
 FRCNN.trainable = True
 #set a very small learning rate
 optimizer = Adam(learning_rate=1e-5)
+
+checkpoint_path = './outputs/model/frcnn_fine_tune_epoch-loss{val_class_loss_cls:.2f}.hdf5'
+
+
+#set up callbacks
+checkpoint = callbacks.ModelCheckpoint(filepath=checkpoint_path, save_weights_only=True, verbose=1)
 
 #recompile the model
 FRCNN.compile(optimizer= Adam(learning_rate=1e-5), run_eagerly=True)

@@ -146,7 +146,7 @@ class FRCNN(keras.Model):
             
         P_rpn = self.rpn(X, training = False)
 
-        X, Y, pos_samples, discard = train_helpers.second_stage_helper(X, P_rpn, img_data)
+        X, Y, pos_samples, discard = train_helpers.second_stage_helper(X, P_rpn, img_data, C)
         
         frcnn_pred = self(X, training=True)
         loss = self.compute_loss(frcnn_pred, Y)
