@@ -62,7 +62,7 @@
           }
         },
         "gather": {
-          "logged": 1628708173945
+          "logged": 1628712328553
         }
       },
       "id": "015b9335-27d6-4664-99e5-197bc702e0f2"
@@ -100,7 +100,7 @@
       "execution_count": 2,
       "metadata": {
         "gather": {
-          "logged": 1628708174759
+          "logged": 1628712329553
         }
       },
       "id": "78ea8765"
@@ -139,7 +139,7 @@
           }
         },
         "gather": {
-          "logged": 1628708175112
+          "logged": 1628712330100
         }
       },
       "id": "6d1345f7-78c9-43af-8c92-b9c279a9df02"
@@ -179,7 +179,7 @@
           }
         },
         "gather": {
-          "logged": 1628708175409
+          "logged": 1628712331034
         }
       },
       "id": "82d90ba9-a8bd-40dc-a883-06d72fae9428"
@@ -236,7 +236,7 @@
             "AmlCompute wait for completion finished\n",
             "\n",
             "Minimum number of nodes requested have been provisioned\n",
-            "{'currentNodeCount': 2, 'targetNodeCount': 1, 'nodeStateCounts': {'preparingNodeCount': 0, 'runningNodeCount': 0, 'idleNodeCount': 2, 'unusableNodeCount': 0, 'leavingNodeCount': 0, 'preemptedNodeCount': 0}, 'allocationState': 'Resizing', 'allocationStateTransitionTime': '2021-08-11T18:56:10.753000+00:00', 'errors': None, 'creationTime': '2021-07-08T18:36:44.988863+00:00', 'modifiedTime': '2021-07-08T18:37:15.441038+00:00', 'provisioningState': 'Succeeded', 'provisioningStateTransitionTime': None, 'scaleSettings': {'minNodeCount': 0, 'maxNodeCount': 4, 'nodeIdleTimeBeforeScaleDown': 'PT1800S'}, 'vmPriority': 'Dedicated', 'vmSize': 'STANDARD_NC12'}\n"
+            "{'currentNodeCount': 2, 'targetNodeCount': 2, 'nodeStateCounts': {'preparingNodeCount': 0, 'runningNodeCount': 1, 'idleNodeCount': 1, 'unusableNodeCount': 0, 'leavingNodeCount': 0, 'preemptedNodeCount': 0}, 'allocationState': 'Steady', 'allocationStateTransitionTime': '2021-08-11T19:21:36.314000+00:00', 'errors': None, 'creationTime': '2021-07-08T18:36:44.988863+00:00', 'modifiedTime': '2021-07-08T18:37:15.441038+00:00', 'provisioningState': 'Succeeded', 'provisioningStateTransitionTime': None, 'scaleSettings': {'minNodeCount': 0, 'maxNodeCount': 4, 'nodeIdleTimeBeforeScaleDown': 'PT1800S'}, 'vmPriority': 'Dedicated', 'vmSize': 'STANDARD_NC12'}\n"
           ]
         }
       ],
@@ -253,7 +253,7 @@
           }
         },
         "gather": {
-          "logged": 1628708175662
+          "logged": 1628712331245
         }
       },
       "id": "0e762f3c-9e9f-4dc5-9d79-81ad089d1bf6"
@@ -336,7 +336,7 @@
           }
         },
         "gather": {
-          "logged": 1628708176221
+          "logged": 1628712331692
         }
       },
       "id": "c4514c85-4da0-47dd-8714-b529b8f07312"
@@ -392,7 +392,7 @@
           }
         },
         "gather": {
-          "logged": 1628708179379
+          "logged": 1628712335735
         }
       },
       "id": "b2b0f0b9-490a-471d-afd7-d9e40e3b0f8a"
@@ -425,7 +425,7 @@
           }
         },
         "gather": {
-          "logged": 1628708179611
+          "logged": 1628712335992
         }
       },
       "id": "bfd09fc2-441d-490d-bb8a-de3a121754b1"
@@ -449,7 +449,7 @@
           }
         },
         "gather": {
-          "logged": 1628708181788
+          "logged": 1628712342660
         }
       },
       "id": "5289f7f6-dd9c-44c6-ab78-87e405c86b98"

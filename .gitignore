@@ -93,8 +93,8 @@ ENV/
 *.hdf5
 
 #azure
-*.amlignore
-*.amltmp
+**/*.amlignore
+**/*.amltmp
 
 #jupyter Notebook
-*.ipynb_*
+**/*.ipynb_*
