@@ -130,10 +130,16 @@ reduce_lr = callbacks.ReduceLROnPlateau(monitor="val_class_loss_cls", factor=0.2
 # Create an early stopping callback.
 early_stopping = callbacks.EarlyStopping(monitor="val_class_loss_cls", patience=5, restore_best_weights=True)
 
+#this will reduce the time between evaluation by shortening the epoch lenth to less than the full training dataset size
+steps_per_epoch = int(total_train_records / 10)
+
+#this will reduce the amount of validataion data used to generate validation losses
+validation_steps = int(total_val_records / 10)
+
 
 FRCNN = FRCNN(model_rpn, model_all, C)
 FRCNN.compile(optimizer= optimizer, run_eagerly=True)
-FRCNN.fit(x=train_dataset, epochs=C.num_epochs, verbose='auto', validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint, LogRunMetrics()])
+FRCNN.fit(x=train_dataset, epochs=C.num_epochs, verbose='auto', steps_per_epoch=steps_per_epoch, validation_steps=validation_steps, validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint, LogRunMetrics()])
 
 
 print('Primary training complete, starting fine tuning for 1 epoch.')
@@ -148,6 +154,7 @@ checkpoint_path = './outputs/model/frcnn_fine_tune_epoch-loss{val_class_loss_cls
 #set up callbacks
 checkpoint = callbacks.ModelCheckpoint(filepath=checkpoint_path, save_weights_only=True, verbose=1)
 
+
 #recompile the model
 FRCNN.compile(optimizer= Adam(learning_rate=1e-5), run_eagerly=True)
-FRCNN.fit(x=train_dataset, epochs=1, verbose='auto', validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint, LogRunMetrics()])
+FRCNN.fit(x=train_dataset, epochs=1, verbose='auto', steps_per_epoch=steps_per_epoch, validation_steps=validation_steps, validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint, LogRunMetrics()])
