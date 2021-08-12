@@ -70,7 +70,7 @@ class FRCNN(keras.Model):
 
         
         def class_loss_cls(y_true, y_pred):
-            return lambda_cls_class * K.mean(categorical_crossentropy(y_true[0, :, :], y_pred[0, :, :]))
+            return lambda_cls_class * K.mean(categorical_crossentropy(y_true[:, :, :], y_pred[:, :, :]))
         
         rpn_loss_cls = rpn_loss_cls(frcnn_targets[0], frcnn_pred[0])
         rpn_loss_regr = rpn_loss_regr(frcnn_targets[1], frcnn_pred[1])
