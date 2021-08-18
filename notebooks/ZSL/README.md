@@ -1,20 +1,14 @@
-# keras-frcnn
-Keras implementation of Faster R-CNN: Towards Real-Time Object Detection with Region Proposal Networks.
-adapted from https://github.com/kbardool/keras-frcnn
+# keras-frcnn-Zero-shot
+Keras implementation of Faster R-CNN with CLIP
 
 
 USAGE:
-- `train_frcnn.py` can be used to train a model. 
+- `train_ZSL.py` can be used to train a model. 
 
-- Running `train_frcnn.py` will write weights to disk to an hdf5 file, as well as all the setting of the training run to a `pickle` file. These
-settings can then be loaded by `test_frcnn.py` for any testing.
+- Running `train_ZSL.py` will write weights to disk to an hdf5 file, as well as all the setting of the training run to a `pickle` file. 
 
-- test_frcnn.py can be used to perform inference, given pretrained weights and a config file. Specify a path to the folder containing
-images:
-    `python test_frcnn.py -p /path/to/test_data/`
 
 
 NOTES:
-- config.py contains all settings for the train or test run. The default settings match those in the original Faster-RCNN
-paper. 
+
 
