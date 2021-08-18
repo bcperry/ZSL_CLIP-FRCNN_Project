@@ -11,58 +11,8 @@ import tensorflow_addons as tfa
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 from tqdm import tqdm
-#from azureml.core import Run
-
-'''
-def bytes_feature(value):
-    return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
-
-
-def create_example(image_path, caption):
-    feature = {
-        "caption": bytes_feature(caption.encode()),
-        "raw_image": bytes_feature(tf.io.read_file(image_path).numpy()),
-    }
-    return tf.train.Example(features=tf.train.Features(feature=feature))
-
-
-def write_tfrecords(file_name, image_paths):
-    caption_list = []
-    image_path_list = []
-    for image_path in image_paths:
-        captions = image_path_to_caption[image_path][:captions_per_image]
-        caption_list.extend(captions)
-        image_path_list.extend([image_path] * len(captions))
-
-    with tf.io.TFRecordWriter(file_name) as writer:
-        for example_idx in range(len(image_path_list)):
-            example = create_example(
-                image_path_list[example_idx], caption_list[example_idx]
-            )
-            writer.write(example.SerializeToString())
-    return example_idx + 1
-
-
-def write_data(image_paths, num_files, files_prefix):
-    example_counter = 0
-    for file_idx in tqdm(range(num_files)):
-        file_name = files_prefix + "-%02d.tfrecord" % (file_idx)
-        start_idx = images_per_file * file_idx
-        end_idx = start_idx + images_per_file
-        example_counter += write_tfrecords(file_name, image_paths[start_idx:end_idx])
-    return example_counter
-
-
-train_example_count = write_data(train_image_paths, num_train_files, train_files_prefix)
-print(f"{train_example_count} training examples were written to tfrecord files.")
-
-valid_example_count = write_data(valid_image_paths, num_valid_files, valid_files_prefix)
-print(f"{valid_example_count} evaluation examples were written to tfrecord files.")
-
-
-
-
-
+from keras.callbacks import Callback
+from azureml.core import Run
 
 
 
@@ -82,17 +32,6 @@ batch_size = args.batch_size
 tfrecords_dir = args.data_folder
 train_example_count = args.num_train_examples
 valid_example_count = args.num_validation_examples
-
-'''
-num_epochs = 1
-batch_size = 10
-tfrecords_dir = r'C:\Data_drive\Github\GEOINT_Zero-shot_Object_identification\notebooks\datasets\tfrecords'
-train_example_count = 50
-valid_example_count = 10
-
-
-
-
 
 print('training dataset is stored here:', tfrecords_dir)
 
@@ -186,12 +125,12 @@ def create_text_encoder(
 ):
     # Load the BERT preprocessing module.
     preprocess = hub.KerasLayer(
-        "https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3",
+        "https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/2",
         name="text_preprocessing",
     )
     # Load the pre-trained BERT model to be used as the base encoder.
     bert = hub.KerasLayer(
-        "https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-4_H-512_A-8/2",
+        "https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-4_H-512_A-8/1",
         "bert",
     )
     # Set the trainability of the base encoder.
@@ -237,14 +176,14 @@ class DualEncoder(keras.Model):
     def call(self, features, training=False):
         # Place each encoder on a separate GPU (if available).
         # TF will fallback on available devices if there are fewer than 2 GPUs.
-        
+
         with tf.device("/gpu:0"):
             # Get the embeddings for the captions.
             caption_embeddings = text_encoder(features["caption"], training=training)
         with tf.device("/gpu:1"):
             # Get the embeddings for the images.
             image_embeddings = vision_encoder(features["image"], training=training)
-          
+
         return caption_embeddings, image_embeddings
 
     def compute_loss(self, caption_embeddings, image_embeddings):
@@ -300,15 +239,6 @@ class DualEncoder(keras.Model):
 In this experiment, we freeze the base encoders for text and images, and make only
 the projection head trainable.
 """
-print(f"Number of GPUs: {len(tf.config.list_physical_devices('GPU'))}")
-print(f"Number of examples (caption-image pairs): {train_example_count}")
-print(f"Batch size: {batch_size}")
-print(f"Steps per epoch: {int(np.ceil(train_example_count / batch_size))}")
-train_dataset = get_dataset(os.path.join(tfrecords_dir, "train-*.tfrecord"), batch_size)
-valid_dataset = get_dataset(os.path.join(tfrecords_dir, "valid-*.tfrecord"), batch_size)
-
-
-
 
 vision_encoder = create_vision_encoder(
     num_projection_layers=1, projection_dims=256, dropout_rate=0.1
@@ -327,7 +257,12 @@ takes around 12 minutes per epoch using a V100 GPU accelerator. If 2 GPUs are av
 the epoch takes around 8 minutes.
 """
 
-
+print(f"Number of GPUs: {len(tf.config.list_physical_devices('GPU'))}")
+print(f"Number of examples (caption-image pairs): {train_example_count}")
+print(f"Batch size: {batch_size}")
+print(f"Steps per epoch: {int(np.ceil(train_example_count / batch_size))}")
+train_dataset = get_dataset(os.path.join(tfrecords_dir, "train-*.tfrecord"), batch_size)
+valid_dataset = get_dataset(os.path.join(tfrecords_dir, "valid-*.tfrecord"), batch_size)
 
 
 
@@ -341,7 +276,6 @@ early_stopping = tf.keras.callbacks.EarlyStopping(
 )
 
 # start an Azure ML run
-'''
 run = Run.get_context()
 
 
@@ -357,14 +291,7 @@ history = dual_encoder.fit(
     validation_data=valid_dataset,
     callbacks=[reduce_lr, early_stopping, LogRunMetrics()],
 )
-'''
 
-history = dual_encoder.fit(
-    train_dataset,
-    epochs=num_epochs,
-    validation_data=valid_dataset,
-    callbacks=[reduce_lr, early_stopping],
-)
 
 # create a ./outputs/model folder in the compute target
 # files saved in the "./outputs" folder are automatically uploaded into run history
@@ -377,9 +304,3 @@ vision_encoder.save("./outputs/model/vision_encoder")
 text_encoder.save("./outputs/model/text_encoder")
 print("model saved in ./outputs/model folder")
 
-
-
-
-
-
-    

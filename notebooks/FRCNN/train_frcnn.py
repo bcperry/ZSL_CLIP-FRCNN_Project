@@ -9,6 +9,7 @@ from tensorflow.keras.layers import Input
 from tensorflow.keras.models import Model
 from tensorflow.keras.applications.resnet50 import ResNet50
 from tensorflow.keras import callbacks as callbacks
+from tensorflow.keras.callbacks import Callback
 
 from keras_frcnn import config
 from keras_frcnn import losses as losses
@@ -18,8 +19,7 @@ from keras_frcnn.frcnn import FRCNN
 
 from keras_frcnn.tfrecord_parser import get_data
 
-
-#from azureml.core import Run
+from azureml.core import Run
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--data-folder', type=str, dest='test_tfrecords_dir', default=None, help='data folder containing tfrecord files and label file')
@@ -47,13 +47,13 @@ if model_path_regex.group(2) != '.hdf5':
     exit(1)
 
 
-train_dataset, total_train_records = get_data(C.train_path, 'train')
-val_dataset, total_val_records = get_data(C.train_path, 'test')
+train_dataset, total_train_records = get_data('train', C)
+val_dataset, total_val_records = get_data('test', C)
 
-class_mapping = train_helpers.get_class_map()
+C.class_mapping = train_helpers.get_class_map(C)
 
 #find the largest class id and add 1 for the background class
-num_ids = class_mapping[max(class_mapping, key=class_mapping.get)] + 1
+num_ids = C.class_mapping[max(C.class_mapping, key=C.class_mapping.get)] + 1
 
 print(f'Num train samples {total_train_records}')
 print(f'Num val samples {total_val_records}')
@@ -104,14 +104,21 @@ print('Starting training')
 vis = True
 
 # start an Azure ML run
-#run = Run.get_context()
+
+run = Run.get_context()
+
+class LogRunMetrics(Callback):
+    # callback at the end of every epoch
+    def on_epoch_end(self, epoch, log):
+        # log a value repeated which creates a list
+        run.log('Classifier Loss', log['val_class_loss_cls'])
 
 #Azure note:
     # create a ./outputs/model folder in the compute target
     # files saved in the "./outputs" folder are automatically uploaded into run history
 os.makedirs('./outputs/model', exist_ok=True)
 
-checkpoint_path = './outputs/model/frcnn_epoch{epoch:02d}-loss{val_loss:.2f}.hdf5'
+checkpoint_path = './outputs/model/frcnn_epoch{epoch:02d}-loss{val_class_loss_cls:.2f}.hdf5'
 
 
 #set up callbacks
@@ -123,10 +130,16 @@ reduce_lr = callbacks.ReduceLROnPlateau(monitor="val_class_loss_cls", factor=0.2
 # Create an early stopping callback.
 early_stopping = callbacks.EarlyStopping(monitor="val_class_loss_cls", patience=5, restore_best_weights=True)
 
+#this will reduce the time between evaluation by shortening the epoch lenth to less than the full training dataset size
+steps_per_epoch = int(total_train_records / 10)
 
-FRCNN = FRCNN(model_rpn, model_all)
+#this will reduce the amount of validataion data used to generate validation losses
+validation_steps = int(total_val_records / 10)
+
+
+FRCNN = FRCNN(model_rpn, model_all, C)
 FRCNN.compile(optimizer= optimizer, run_eagerly=True)
-FRCNN.fit(x=train_dataset, epochs=C.num_epochs, verbose='auto', validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint])
+FRCNN.fit(x=train_dataset, epochs=C.num_epochs, verbose='auto', steps_per_epoch=steps_per_epoch, validation_steps=validation_steps, validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint, LogRunMetrics()])
 
 
 print('Primary training complete, starting fine tuning for 1 epoch.')
@@ -135,6 +148,13 @@ FRCNN.trainable = True
 #set a very small learning rate
 optimizer = Adam(learning_rate=1e-5)
 
+checkpoint_path = './outputs/model/frcnn_fine_tune_epoch-loss{val_class_loss_cls:.2f}.hdf5'
+
+
+#set up callbacks
+checkpoint = callbacks.ModelCheckpoint(filepath=checkpoint_path, save_weights_only=True, verbose=1)
+
+
 #recompile the model
 FRCNN.compile(optimizer= Adam(learning_rate=1e-5), run_eagerly=True)
-FRCNN.fit(x=train_dataset, epochs=1, verbose='auto', validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint])
+FRCNN.fit(x=train_dataset, epochs=1, verbose='auto', steps_per_epoch=steps_per_epoch, validation_steps=validation_steps, validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint, LogRunMetrics()])

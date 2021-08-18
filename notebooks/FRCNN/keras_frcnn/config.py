@@ -8,10 +8,10 @@ class Config:
         self.train_path = r'C:\Data_drive\workspace\FRCNN'
         
         #number of epochs to train
-        self.num_epochs = 1
+        self.num_epochs = 25
         
         # number of ROIs at once
-        self.num_rois = 200
+        self.num_rois = 50
         
         self.output_weight_path = r'C:\Data_drive\workspace\FRCNN\model.hdf5'
         

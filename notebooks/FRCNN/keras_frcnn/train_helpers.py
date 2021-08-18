@@ -8,16 +8,13 @@ Created on Tue Aug  3 08:59:10 2021
 import keras_frcnn.roi_helpers as roi_helpers
 import numpy as np
 import random
-from . import config
 from . import data_generators
 import glob
 
 
-def get_class_map():
-    C = config.Config()
+def get_class_map(C):
     
     label_file = glob.glob(C.train_path + '/*labels.txt')
-
     class_mapping = {}
     file = open(label_file[0], "r")
     
@@ -36,11 +33,9 @@ def get_class_map():
     
     return class_mapping
 
-def second_stage_helper(X, P_rpn, img_data):
+def second_stage_helper(X, P_rpn, img_data, C):
     
-    
-    C = config.Config()
-    class_mapping = get_class_map()
+    class_mapping = C.class_mapping
 
     #find the largest class id
     num_ids = class_mapping[max(class_mapping, key=class_mapping.get)]
@@ -65,14 +60,14 @@ def second_stage_helper(X, P_rpn, img_data):
 
     for im in range(X.shape[0]):
         #get the rpn targets
-        _, rpn_targets, _ = data_generators.calc_targets(X[im], img_data[im], P_rpn[0].shape[1], P_rpn[0].shape[2])
+        _, rpn_targets, _ = data_generators.calc_targets(C, X[im], img_data[im], P_rpn[0].shape[1], P_rpn[0].shape[2])
         
         
         #R input and output are in feature space
-        R = roi_helpers.rpn_to_roi(P_rpn[0][im:im+1], P_rpn[1][im:im+1], use_regr=True, overlap_thresh=0.1, max_boxes=900)
+        R = roi_helpers.rpn_to_roi(C, P_rpn[0][im:im+1], P_rpn[1][im:im+1], use_regr=True, overlap_thresh=0.1, max_boxes=900)
     
         # note: calc_iou converts from (x1,y1,x2,y2) to (x,y,w,h) format
-        X2, Y1, Y2, IouS = roi_helpers.calc_iou(R, img_data[im])
+        X2, Y1, Y2, IouS = roi_helpers.calc_iou(C, R, img_data[im])
 
         if X2 is None:
             discard.append(im)

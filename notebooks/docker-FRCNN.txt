@@ -1,0 +1,89 @@
+# Copyright (c) Microsoft Corporation. All rights reserved.
+# Licensed under the MIT License.
+
+FROM mcr.microsoft.com/azureml/o16n-base/python-assets:20210623.40134510 AS inferencing-assets
+
+FROM nvidia/cuda:11.2.0-cudnn8-devel-ubuntu18.04
+
+USER root:root
+
+ENV com.nvidia.cuda.version $CUDA_VERSION
+ENV com.nvidia.volumes.needed nvidia_driver
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
+ENV DEBIAN_FRONTEND noninteractive
+ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64
+ENV NCCL_DEBUG=INFO
+ENV HOROVOD_GPU_ALLREDUCE=NCCL
+
+# Install Common Dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    # SSH and RDMA
+    libmlx4-1 \
+    libmlx5-1 \
+    librdmacm1 \
+    libibverbs1 \
+    libmthca1 \
+    libdapl2 \
+    dapl2-utils \
+    openssh-client \
+    openssh-server \
+    redis \
+    iproute2 && \
+    # rdma-core dependencies
+    apt-get install -y \
+    udev \
+    libudev-dev \
+    libnl-3-dev \
+    libnl-route-3-dev \
+    gcc \
+    ninja-build \
+    pkg-config \
+    valgrind \
+    cython3 \
+    python3-docutils \
+    pandoc \
+    python3-dev && \
+    # Others
+    apt-get install -y \
+    build-essential \
+    bzip2 \
+    libbz2-1.0 \
+    systemd \
+    git \
+    wget \
+    cpio \
+    pciutils \
+    libnuma-dev \
+    ibutils \
+    ibverbs-utils \ 
+    rdmacm-utils \
+    infiniband-diags \
+    perftest \
+    librdmacm-dev \
+    libibverbs-dev \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libssl1.0.0 \
+    libzstd1 \
+    libglib2.0-0 \
+    dh-make \
+    libnettle6 \
+    libx11-dev \
+    nginx \
+    liblz4-1 \
+    fuse && \
+    apt-get clean -y && \
+    rm -rf /var/lib/apt/lists/*
+
+
+# Conda Environment
+ENV MINICONDA_VERSION py37_4.9.2
+ENV PATH /opt/miniconda/bin:$PATH
+RUN wget -qO /tmp/miniconda.sh https://repo.continuum.io/miniconda/Miniconda3-${MINICONDA_VERSION}-Linux-x86_64.sh && \
+    bash /tmp/miniconda.sh -bf -p /opt/miniconda && \
+    conda clean -ay && \
+    rm -rf /opt/miniconda/pkgs && \
+    rm /tmp/miniconda.sh && \
+    find / -type d -name __pycache__ | xargs rm -rf

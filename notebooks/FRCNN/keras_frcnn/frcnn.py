@@ -18,12 +18,12 @@ from keras_frcnn.tfrecord_parser import batch_processor
 
 
 class FRCNN(keras.Model):
-    def __init__(self, rpn, frcnn, **kwargs):
+    def __init__(self, rpn, frcnn, C, **kwargs):
         super(FRCNN, self).__init__(**kwargs)
         self.rpn = rpn
         self.frcnn = frcnn
+        self.C = C
         (feature_map_width, feature_map_height) = nn.get_feature_map_size(rpn)
-        self.class_mapping = train_helpers.get_class_map()
         self.feature_map_width = feature_map_width
         self.feature_map_height = feature_map_height
         #self.loss_tracker = keras.metrics.Mean(name="loss")
@@ -70,7 +70,7 @@ class FRCNN(keras.Model):
 
         
         def class_loss_cls(y_true, y_pred):
-            return lambda_cls_class * K.mean(categorical_crossentropy(y_true[0, :, :], y_pred[0, :, :]))
+            return lambda_cls_class * K.mean(categorical_crossentropy(y_true[:, :, :], y_pred[:, :, :]))
         
         rpn_loss_cls = rpn_loss_cls(frcnn_targets[0], frcnn_pred[0])
         rpn_loss_regr = rpn_loss_regr(frcnn_targets[1], frcnn_pred[1])
@@ -103,8 +103,8 @@ class FRCNN(keras.Model):
                  tf.compat.v1.placeholder(shape = Y_cnn_cls_shape, dtype='float32'),
                  tf.compat.v1.placeholder(shape = Y_cnn_reg_shape, dtype='float32')]
         else:
-            X = batch_processor(batch)
-            C = config.Config()
+            X = batch_processor(batch, self.C)
+            C = self.C
             #initialize new X and img_data 
             X_temp = np.zeros(shape=(len(X),C.im_size, C.im_size, 3),dtype='uint8')
             img_data_temp = []
@@ -117,7 +117,7 @@ class FRCNN(keras.Model):
             
             P_rpn = self.rpn(X, training = False)
 
-            X, Y, pos_samples, discard = train_helpers.second_stage_helper(X, P_rpn, img_data)
+            X, Y, pos_samples, discard = train_helpers.second_stage_helper(X, P_rpn, img_data, C)
 
             
         with tf.GradientTape() as tape:
@@ -132,8 +132,8 @@ class FRCNN(keras.Model):
         return {"rpn_loss_cls": loss[0].numpy(), "rpn_loss_regr": loss[1].numpy(), "class_loss_cls": loss[2].numpy(), "class_loss_regr": loss[3].numpy()}
 
     def test_step(self, batch):
-        X = batch_processor(batch)
-        C = config.Config()
+        X = batch_processor(batch, self.C)
+        C = self.C
         #initialize new X and img_data 
         X_temp = np.zeros(shape=(len(X),C.im_size, C.im_size, 3),dtype='uint8')
         img_data_temp = []
@@ -146,7 +146,7 @@ class FRCNN(keras.Model):
             
         P_rpn = self.rpn(X, training = False)
 
-        X, Y, pos_samples, discard = train_helpers.second_stage_helper(X, P_rpn, img_data)
+        X, Y, pos_samples, discard = train_helpers.second_stage_helper(X, P_rpn, img_data, C)
         
         frcnn_pred = self(X, training=True)
         loss = self.compute_loss(frcnn_pred, Y)

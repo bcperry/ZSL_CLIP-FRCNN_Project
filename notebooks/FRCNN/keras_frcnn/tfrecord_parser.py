@@ -4,9 +4,8 @@ from . import config
 import numpy
 
 
-def batch_processor(batch):
+def batch_processor(batch, C):
     
-    C = config.Config()  
     label_file = glob.glob(C.train_path + '/*labels.txt')
     
     classes_count = {}
@@ -72,7 +71,7 @@ def batch_processor(batch):
     return imgs
 
 
-def get_data(input_path, data_type):
+def get_data(data_type, C):
     found_bg = False
     all_imgs = {}
 
@@ -80,11 +79,9 @@ def get_data(input_path, data_type):
 
     class_mapping = {}
     
-    label_file = glob.glob(input_path + '/*labels.txt')
+    label_file = glob.glob(C.train_path + '/*labels.txt')
     
-    record_file = glob.glob(input_path + "/*" + data_type + "*.record")
-    
-    C = config.Config()  
+    record_file = glob.glob(C.train_path + "/*" + data_type + "*.record")
 
     #read in the class labels
     class_dict = {}
@@ -150,9 +147,9 @@ def get_data(input_path, data_type):
         
         
         batch_size = C.batch_size
-        TFdataset = get_dataset(input_path + "/*" + data_type + "*.record", batch_size)
+        TFdataset = get_dataset(C.train_path + "/*" + data_type + "*.record", batch_size)
 
-        record_file = glob.glob(input_path + "/*" + data_type + "*.record")
+        record_file = glob.glob(C.train_path + "/*" + data_type + "*.record")
         
         total_records = sum(1 for _ in tf.data.TFRecordDataset(record_file[0]))
         print("total records in the TFrecord file is : " + str(total_records))
