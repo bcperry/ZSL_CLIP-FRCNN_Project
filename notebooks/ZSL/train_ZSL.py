@@ -31,7 +31,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--data-folder', type=str, dest='test_tfrecords_dir', default=None, help='data folder containing tfrecord files and label file')
 parser.add_argument('--num-epochs', type=int, dest='num_epochs', default=50, help='number of epochs for training')
 parser.add_argument('--model-type', type=str, dest='model_type', default='ZSL', help='ZSL or FRCNN')
-parser.add_argument('--azure', type=bool, dest='azure', default=False, help='is the model running on Azure')
+parser.add_argument('--azure', type=bool, dest='azure', default=True, help='is the model running on Azure')
 
 args = parser.parse_args()
 
@@ -162,11 +162,6 @@ steps_per_epoch = int(total_train_records / C.batch_size)
 
 #this will reduce the amount of validataion data used to generate validation losses
 validation_steps = int(total_val_records / C.batch_size)
-
-
-#TODO: DELETE
-steps_per_epoch = 1
-validation_steps = 1
 
 if model_type == 'ZSL':
     Dual_FRCNN = Dual_FRCNN(model_rpn, model_all, text_encoder, C)

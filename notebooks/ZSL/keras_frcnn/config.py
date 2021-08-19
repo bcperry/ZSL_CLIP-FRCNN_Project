@@ -11,7 +11,7 @@ class Config:
         self.num_epochs = 25
         
         # number of ROIs at once
-        self.num_rois = 50
+        self.num_rois = 25
         
         self.output_weight_path = r'C:\Data_drive\workspace\FRCNN\model.hdf5'
         

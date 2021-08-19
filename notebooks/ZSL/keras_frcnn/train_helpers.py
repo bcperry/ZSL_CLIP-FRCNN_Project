@@ -46,6 +46,10 @@ def get_class_text(C):
         if text_key == 0:
             class_text_mapping[text_key] = 'A background with features: None'
             continue
+        #these keys exist in the data but are not in the descriptions
+        if text_key == 75 or text_key == 82 :
+            class_text_mapping[text_key] = 'A unknown with features: '
+            continue
         text_list = class_text[text_key]
         desc = "A " + key + " with features: "
         for i in text_list:
