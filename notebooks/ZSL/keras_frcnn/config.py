@@ -11,7 +11,7 @@ class Config:
         self.num_epochs = 25
         
         # number of ROIs at once
-        self.num_rois = 25
+        self.num_rois = 200
         
         self.output_weight_path = r'C:\Data_drive\workspace\FRCNN\model.hdf5'
         
@@ -21,7 +21,7 @@ class Config:
         
         self.text_dict_pickle = r'C:\Users\blain\Downloads\xview_attribute_dict_text.pickle'
         
-        self.batch_size = 5
+        self.batch_size = 12
         
         #CLIP projection settings
         

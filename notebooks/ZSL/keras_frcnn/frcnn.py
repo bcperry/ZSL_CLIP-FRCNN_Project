@@ -108,7 +108,7 @@ class FRCNN(keras.Model):
         gradients = tape.gradient(loss, self.trainable_variables)
         self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
         
-        total_loss = (loss[0].numpy() + loss[1].numpy() + loss[2].numpy() + loss[3].numpy()) / 4
+        total_loss = np.average((loss[0].numpy() + loss[1].numpy() + loss[2].numpy() + loss[3].numpy()) / 4)
         return {"rpn_loss_cls": loss[0].numpy(), "rpn_loss_regr": loss[1].numpy(), "class_loss_cls": loss[2].numpy(), "class_loss_regr": loss[3].numpy(), "total_loss": total_loss}
         #return {'loss': 'is lost'}
     def test_step(self, batch):
@@ -130,5 +130,5 @@ class FRCNN(keras.Model):
         
         frcnn_pred = self(X, training=True)
         loss = self.compute_loss(frcnn_pred, Y)
-        total_loss = (loss[0].numpy() + loss[1].numpy() + loss[2].numpy() + loss[3].numpy()) / 4
+        total_loss = np.average((loss[0].numpy() + loss[1].numpy() + loss[2].numpy() + loss[3].numpy()) / 4)
         return {"rpn_loss_cls": loss[0].numpy(), "rpn_loss_regr": loss[1].numpy(), "class_loss_cls": loss[2].numpy(), "class_loss_regr": loss[3].numpy(), "total_loss": total_loss}

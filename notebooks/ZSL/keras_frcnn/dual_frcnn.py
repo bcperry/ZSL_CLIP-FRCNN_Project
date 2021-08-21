@@ -158,7 +158,7 @@ class Dual_FRCNN(keras.Model):
         self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
         # Monitor loss
         #self.loss_tracker.update_state(loss)
-        total_loss = (loss[0].numpy() + loss[1].numpy() + np.average(loss[2].numpy()) + loss[3].numpy()) / 4
+        total_loss = np.average((loss[0].numpy() + loss[1].numpy() + np.average(loss[2].numpy()) + loss[3].numpy()) / 4)
         return {"rpn_loss_cls": loss[0].numpy(), "rpn_loss_regr": loss[1].numpy(), "embedding_loss": loss[2].numpy(), "class_loss_regr": loss[3].numpy(), "total_loss": total_loss}
 
     def test_step(self, batch):
@@ -180,5 +180,5 @@ class Dual_FRCNN(keras.Model):
         
         frcnn_pred, text_embedding = self([X, text_batch], training=True)
         loss = self.compute_loss(frcnn_pred, text_embedding, Y)
-        total_loss = (loss[0].numpy() + loss[1].numpy() + np.average(loss[2].numpy()) + loss[3].numpy()) / 4
+        total_loss = np.average((loss[0].numpy() + loss[1].numpy() + np.average(loss[2].numpy()) + loss[3].numpy()) / 4)
         return {"rpn_loss_cls": loss[0].numpy(), "rpn_loss_regr": loss[1].numpy(), "embedding_loss": loss[2].numpy(), "class_loss_regr": loss[3].numpy(), "total_loss": total_loss}
