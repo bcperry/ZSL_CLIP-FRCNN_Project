@@ -203,6 +203,10 @@ def second_stage_helper(X, P_rpn, img_data, C):
         discard = C.batch_size - X[0].shape[0]
     else:
         discard = 0
-
+    
+    Y[0] = Y[0][:,:,:, :int(Y[0].shape[3]/2)]
+    Y[1] = Y[1][:,:,:, :int(Y[1].shape[3]/2)]
+    Y[3] = Y[3][:,:, :int(Y[3].shape[2]/2)]
+    
     return X, Y, pos_samples, discard, text_batch
     

@@ -21,24 +21,20 @@ from keras_frcnn import CLIP
 
 from keras_frcnn.tfrecord_parser import get_data
 from tensorflow.keras import layers
-
-
-
-
-
+import tensorflow as tf
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--data-folder', type=str, dest='test_tfrecords_dir', default=None, help='data folder containing tfrecord files and label file')
 parser.add_argument('--num-epochs', type=int, dest='num_epochs', default=50, help='number of epochs for training')
 parser.add_argument('--model-type', type=str, dest='model_type', default='ZSL', help='ZSL or FRCNN')
-parser.add_argument('--azure', type=bool, dest='azure', default=True, help='is the model running on Azure')
+parser.add_argument('--azure', type=str, dest='azure', default=True, help='is the model running on Azure')
 
 args = parser.parse_args()
 
 num_epochs = args.num_epochs
 data_dir = args.test_tfrecords_dir
 model_type = args.model_type
-azure = args.azure
+azure = args.azure == "True"
 
 if azure:
     from azureml.core import Run
@@ -92,29 +88,38 @@ roi_input = Input(shape=(C.num_rois, 4))
 
 
 print('Building models.')
-# define the base network (resnet here)
-base_model = ResNet50(input_shape = input_shape_img, weights='imagenet', include_top=False)
+# Create a MirroredStrategy.
+strategy = tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.ReductionToOneDevice())
+#strategy = tf.distribute.get_strategy()
+print('Number of devices: {}'.format(strategy.num_replicas_in_sync))
+# Open a strategy scope.
+with strategy.scope():
+    # Everything that creates variables should be under the strategy scope.
+    # In general this is only model construction & `compile()`.
 
-#freeze the feature extractor
-base_model.trainable = False
+    # define the base network (resnet here)
+    base_model = ResNet50(input_shape = input_shape_img, weights='imagenet', include_top=False)
 
-shared_layers = Model(inputs=base_model.inputs, outputs=base_model.get_layer('conv4_block6_out').output)
+    #freeze the feature extractor
+    base_model.trainable = False
 
-# define the RPN, built on the base layers
-num_anchors = len(C.anchor_box_scales) * len(C.anchor_box_ratios)
-rpn = nn.rpn(shared_layers.output, num_anchors)
-model_rpn = Model(shared_layers.input, rpn[:2])
+    shared_layers = Model(inputs=base_model.inputs, outputs=base_model.get_layer('conv4_block6_out').output)
 
-if model_type == 'ZSL':
-    classifier_ZSL = nn.classifier_ZSL(shared_layers.output, roi_input, C.num_rois, C.num_projection_layers, C.projection_dims, C.dropout_rate, nb_classes=num_ids, trainable=True)
-    # this is a model that holds both the RPN and the classifier, used to train the model end to end
-    model_all = Model([shared_layers.input, roi_input], rpn[:2] + classifier_ZSL)
-    #build the text encoder
-    text_encoder = CLIP.create_text_encoder(C)
-else:
-    classifier = nn.classifier(shared_layers.output, roi_input, C.num_rois, nb_classes=num_ids, trainable=True)
-    # this is a model that holds both the RPN and the classifier, used to train the model end to end
-    model_all = Model([shared_layers.input, roi_input], rpn[:2] + classifier)
+    # define the RPN, built on the base layers
+    num_anchors = len(C.anchor_box_scales) * len(C.anchor_box_ratios)
+    rpn = nn.rpn(shared_layers.output, num_anchors)
+    model_rpn = Model(shared_layers.input, rpn[:2])
+
+    if model_type == 'ZSL':
+        classifier_ZSL = nn.classifier_ZSL(shared_layers.output, roi_input, C.num_rois, C.num_projection_layers, C.projection_dims, C.dropout_rate, nb_classes=num_ids, trainable=True)
+        # this is a model that holds both the RPN and the classifier, used to train the model end to end
+        model_all = Model([shared_layers.input, roi_input], rpn[:2] + classifier_ZSL)
+        #build the text encoder
+        text_encoder = CLIP.create_text_encoder(C)
+    else:
+        classifier = nn.classifier(shared_layers.output, roi_input, C.num_rois, nb_classes=num_ids, trainable=True)
+        # this is a model that holds both the RPN and the classifier, used to train the model end to end
+        model_all = Model([shared_layers.input, roi_input], rpn[:2] + classifier)
 
 print('Models sucessfully built.')
 
@@ -164,10 +169,11 @@ steps_per_epoch = int(total_train_records / C.batch_size)
 validation_steps = int(total_val_records / C.batch_size)
 
 if model_type == 'ZSL':
-    Dual_FRCNN = Dual_FRCNN(model_rpn, model_all, text_encoder, C)
-    Dual_FRCNN.compile(optimizer= optimizer, run_eagerly = True)
+    with strategy.scope():
+        Dual_FRCNN = Dual_FRCNN(model_rpn, model_all, text_encoder, C)
+        Dual_FRCNN.compile(optimizer= optimizer, run_eagerly = True)
     Dual_FRCNN.fit(x=train_dataset, epochs=C.num_epochs, verbose='auto', steps_per_epoch=steps_per_epoch, validation_steps=validation_steps, validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint, LogRunMetrics()])
-    
+        
     
     print('Primary training complete, starting fine tuning for 1 epoch.')
     #set all layers of the FRCNN model to trainable, however we dont set the BERT model layers trainable
@@ -183,11 +189,13 @@ if model_type == 'ZSL':
     
     
     #recompile the model
-    Dual_FRCNN.compile(optimizer= optimizer, run_eagerly=True)
+    with strategy.scope():
+        Dual_FRCNN.compile(optimizer= optimizer, run_eagerly=True)
     Dual_FRCNN.fit(x=train_dataset, epochs=1, verbose='auto', steps_per_epoch=steps_per_epoch, validation_steps=validation_steps, validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint, LogRunMetrics()])
 else:
-    FRCNN = FRCNN(model_rpn, model_all, C)
-    FRCNN.compile(optimizer= optimizer, run_eagerly = True)
+    with strategy.scope():
+        FRCNN = FRCNN(model_rpn, model_all, C)
+        FRCNN.compile(optimizer= optimizer, run_eagerly=True)#-----------------------------------------------------------------asdfasdf-asdfasdfkasjdfhadhfjdfdf--------------------------------------
     FRCNN.fit(x=train_dataset, epochs=C.num_epochs, verbose='auto', steps_per_epoch=steps_per_epoch, validation_steps=validation_steps, validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint, LogRunMetrics()])
     
     
@@ -201,7 +209,7 @@ else:
     checkpoint_path = './outputs/model/FRCNN_fine_tune_epoch-total_loss-{total_loss:.2f}.hdf5'
     checkpoint = callbacks.ModelCheckpoint(filepath=checkpoint_path, save_weights_only=True, verbose=1)
     
-    
-    #recompile the model
-    FRCNN.compile(optimizer= optimizer, run_eagerly=True)
+    with strategy.scope():
+        #recompile the model
+        FRCNN.compile(optimizer= optimizer, run_eagerly=True)
     FRCNN.fit(x=train_dataset, epochs=1, verbose='auto', steps_per_epoch=steps_per_epoch, validation_steps=validation_steps, validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint, LogRunMetrics()])

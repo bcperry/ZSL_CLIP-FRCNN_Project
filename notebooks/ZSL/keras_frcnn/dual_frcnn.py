@@ -60,27 +60,24 @@ class Dual_FRCNN(keras.Model):
         
         epsilon = 1e-4
         
-       	def rpn_loss_regr(y_true, y_pred):
+        def rpn_loss_regr(y_true, y_pred):
        
-       		x = y_true[:, :, :, 4 * num_anchors:] - y_pred
+       		x = y_true - y_pred
        		x_abs = K.abs(x)
        		x_bool = K.cast(K.less_equal(x_abs, 1.0), tf.float32)
        
-       		return lambda_rpn_regr * K.sum(
-       			y_true[:, :, :, :4 * num_anchors] * (x_bool * (0.5 * x * x) + (1 - x_bool) * (x_abs - 0.5))) / K.sum(epsilon + y_true[:, :, :, :4 * num_anchors])
+       		return lambda_rpn_regr * K.sum((
+       			y_true * (x_bool * (0.5 * x * x) + (1 - x_bool) * (x_abs - 0.5))), axis=[1, 2, 3]) / K.sum((epsilon + y_true), axis=[1, 2, 3])
         
        	def rpn_loss_cls(y_true, y_pred):
-               return lambda_rpn_class * K.sum(y_true[:, :, :, :num_anchors] * K.binary_crossentropy(y_pred[:, :, :, :], y_true[:, :, :, num_anchors:])) / K.sum(epsilon + y_true[:, :, :, :num_anchors])
+               return lambda_rpn_class * K.sum((y_true * K.binary_crossentropy(y_pred, y_true)), axis=[1, 2, 3]) / K.sum((epsilon + y_true), axis=[1, 2, 3])
 
         def class_loss_regr(y_true, y_pred):
             def class_loss_regr_fixed_num(y_true, y_pred):
-                #subtract 1 here to take out the background class
-                num_classes_cls_regr = num_classes - 1
-                
-                x = y_true[:, :, 4*num_classes_cls_regr:] - y_pred
+                x = y_true - y_pred
                 x_abs = K.abs(x)
                 x_bool = K.cast(K.less_equal(x_abs, 1.0), 'float32')
-                return lambda_cls_regr * K.sum(y_true[:, :, :4*num_classes_cls_regr] * (x_bool * (0.5 * x * x) + (1 - x_bool) * (x_abs - 0.5))) / K.sum(epsilon + y_true[:, :, :4*num_classes_cls_regr])
+                return lambda_cls_regr * K.sum((y_true * (x_bool * (0.5 * x * x) + (1 - x_bool) * (x_abs - 0.5))), axis=[1, 2]) / K.sum((epsilon + y_true), axis=[1, 2])
             return class_loss_regr_fixed_num(y_true, y_pred)
 
         
@@ -126,53 +123,31 @@ class Dual_FRCNN(keras.Model):
 
 
     def train_step(self, batch):
-        #if running in graph mode, we will through the training step with a placeholder to build the graph
-        #this currently does not work
-        if batch['image'].shape[0] is None:
-            #roi_input_shape = [None, self.frcnn.input_shape[1][1], self.frcnn.input_shape[1][2]]
-            
-            Y_rpn_cls_shape = [None, self.frcnn.output_shape[0][1], self.frcnn.output_shape[0][2], 2 * self.frcnn.output_shape[0][3]]       
-            Y_rpn_reg_shape = [None, self.frcnn.output_shape[1][1], self.frcnn.output_shape[1][2], 2 * self.frcnn.output_shape[1][3]] 
-            Y_cnn_cls_shape = [None, self.frcnn.output_shape[2][1], self.frcnn.output_shape[2][2]] 
-            Y_cnn_reg_shape = [None, self.frcnn.output_shape[3][1], 2 * self.frcnn.output_shape[3][2]] 
-            
-            
-            #X = [batch['image'], tf.compat.v1.placeholder(shape = roi_input_shape, dtype='float32')]
-            X = [batch['image'], batch['roi_input']]
-            
-            text_batch = tf.compat.v1.placeholder(shape = [None, self.frcnn.output_shape[2][1]], dtype='float32')
-            
-
-            Y = [tf.compat.v1.placeholder(shape = Y_rpn_cls_shape, dtype='float32'),
-                 tf.compat.v1.placeholder(shape = Y_rpn_reg_shape, dtype='float32'),
-                 tf.compat.v1.placeholder(shape = Y_cnn_cls_shape, dtype='float32'),
-                 tf.compat.v1.placeholder(shape = Y_cnn_reg_shape, dtype='float32')]
-        else:
-            X = batch_processor(batch, self.C)
-            C = self.C
-            #initialize new X and img_data 
-            X_temp = np.zeros(shape=(len(X),C.im_size, C.im_size, 3),dtype='uint8')
-            img_data_temp = []
-            for i in range(len(X)):
-                img_data_temp.append(X[i])
-                X_temp[i] = X[i]['rawimage']
-            
-            X = X_temp
-            img_data = img_data_temp
-            
-            P_rpn = self.rpn(X, training = False)
-            
-            X, Y, pos_samples, discard, text_batch = train_helpers.second_stage_helper(X, P_rpn, img_data, C)
-            
-            #check if the batch is empty and skip it
-            if X[0][0].shape == 0:
-                print('error: no images in batch - dual_frcnn.py line 169')
-                #continue
-            
-            if text_batch.shape[0] != X[0].shape[0]:
-                print('DEBUGGING: dual_frcnn line 173')
-            if text_batch.shape[0] != C.batch_size:
-                print('DEBUGGING: small batch')
+        X = batch_processor(batch, self.C)
+        C = self.C
+        #initialize new X and img_data 
+        X_temp = np.zeros(shape=(len(X),C.im_size, C.im_size, 3),dtype='uint8')
+        img_data_temp = []
+        for i in range(len(X)):
+            img_data_temp.append(X[i])
+            X_temp[i] = X[i]['rawimage']
+        
+        X = X_temp
+        img_data = img_data_temp
+        
+        P_rpn = self.rpn(X, training = False)
+        
+        X, Y, pos_samples, discard, text_batch = train_helpers.second_stage_helper(X, P_rpn, img_data, C)
+        
+        #check if the batch is empty and skip it
+        if X[0][0].shape == 0:
+            print('error: no images in batch - dual_frcnn.py line 169')
+            #continue
+        
+        if text_batch.shape[0] != X[0].shape[0]:
+            print('DEBUGGING: dual_frcnn line 173')
+        if text_batch.shape[0] != C.batch_size:
+            print('DEBUGGING: small batch')
             
         with tf.GradientTape() as tape:
             # Forward pass
