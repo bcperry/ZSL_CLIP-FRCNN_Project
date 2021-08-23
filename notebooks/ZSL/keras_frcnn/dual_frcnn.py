@@ -155,7 +155,7 @@ class Dual_FRCNN(keras.Model):
         
         if text_batch.shape[0] != X[0].shape[0]:
             print('DEBUGGING: dual_frcnn line 157')
-        if text_batch.shape[0] != C.batch_size:
+        #if text_batch.shape[0] != C.batch_size:
             #TODO: check
             #print('DEBUGGING: small batch')
             
