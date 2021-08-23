@@ -25,6 +25,7 @@ import tensorflow as tf
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--data-folder', type=str, dest='test_tfrecords_dir', default=None, help='data folder containing tfrecord files and label file')
+parser.add_argument('--input-weight-path', type=str, dest='input_weight_path', default=None, help='file containing pre-trained model weights')
 parser.add_argument('--num-epochs', type=int, dest='num_epochs', default=50, help='number of epochs for training')
 parser.add_argument('--model-type', type=str, dest='model_type', default='ZSL', help='ZSL or FRCNN')
 parser.add_argument('--azure', type=str, dest='azure', default=True, help='is the model running on Azure')
@@ -35,6 +36,7 @@ num_epochs = args.num_epochs
 data_dir = args.test_tfrecords_dir
 model_type = args.model_type
 azure = args.azure == "True"
+input_weight_path = args.input_weight_path 
 
 if azure:
     from azureml.core import Run
@@ -61,6 +63,9 @@ if data_dir is not None:
 
 if num_epochs is not None:
     C.num_epochs = num_epochs
+
+if input_weight_path is not None:
+    C.input_weight_path = input_weight_path
 
 
 model_path_regex = re.match("^(.+)(\.hdf5)$", C.model_path)
@@ -124,17 +129,17 @@ with strategy.scope():
 print('Models sucessfully built.')
 
 try:
-    if (C.image_input_weight_path == None):
+    if (C.input_weight_path == None):
         print('Loaded imagenet weights to the vision backbone.')
     else:
-        print('loading weights from {C.image_input_weight_path}')
-        model_all.load_weights(C.image_input_weight_path, by_name=True)
+        print('loading FRCNN weights from {C.input_weight_path}')
+        model_all.load_weights(C.input_weight_path, by_name=True)
     if model_type == 'ZSL':
-        if (C.text_input_weight_path == None):
+        if (C.input_weight_path == None):
             print('Loaded pretrained BERT weights to the text encoder.')
         else:
-            print('loading weights from {C.text_input_weight_path}')
-            text_encoder.load_weights(C.text_input_weight_path, by_name=True)
+            print('loading text_encoder weights from {C.input_weight_path}')
+            text_encoder.load_weights(C.input_weight_path, by_name=True)
 except:
     print('Could not load pretrained model weights.')
 
@@ -164,9 +169,14 @@ early_stopping = callbacks.EarlyStopping(monitor="total_loss", patience=5, resto
 
 #this will reduce the time between evaluation by shortening the epoch lenth to less than the full training dataset size
 steps_per_epoch = int(total_train_records / C.batch_size)
-
-#this will reduce the amount of validataion data used to generate validation losses
 validation_steps = int(total_val_records / C.batch_size)
+
+#this will reduce the time between evaluation by shortening the epoch lenth to less than the full training dataset size
+while steps_per_epoch >= 2000:
+    steps_per_epoch = int(steps_per_epoch / 2)
+#this will reduce the amount of validataion data used to generate validation losses
+while validation_steps >= 500:
+    validation_steps = int(validation_steps / 2)
 
 if model_type == 'ZSL':
     with strategy.scope():
