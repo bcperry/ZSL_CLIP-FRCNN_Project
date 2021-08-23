@@ -21,7 +21,7 @@ class Config:
         
         self.text_dict_pickle = r'C:\Users\blain\Downloads\xview_attribute_dict_text.pickle'
         
-        self.batch_size = 5
+        self.batch_size = 10
         
         #CLIP projection settings
         

@@ -151,13 +151,13 @@ class Dual_FRCNN(keras.Model):
             X, text_batch, Y = self.prev_batch
         #check if the batch is empty and skip it
         if X[0][0].shape == 0:
-            print('error: no images in batch - dual_frcnn.py line 169')
+            print('error: no images in batch - dual_frcnn.py line 154')
         
         if text_batch.shape[0] != X[0].shape[0]:
-            print('DEBUGGING: dual_frcnn line 173')
+            print('DEBUGGING: dual_frcnn line 157')
         if text_batch.shape[0] != C.batch_size:
             #TODO: check
-            print('DEBUGGING: small batch')
+            #print('DEBUGGING: small batch')
             
         with tf.GradientTape() as tape:
             # Forward pass
