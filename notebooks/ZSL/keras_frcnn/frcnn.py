@@ -12,7 +12,6 @@ from tensorflow.keras import backend as K
 from tensorflow.keras.losses import categorical_crossentropy
 from . import resnet as nn
 from . import train_helpers
-from . import config
 from keras_frcnn.tfrecord_parser import batch_processor
 
 
@@ -41,23 +40,29 @@ class FRCNN(keras.Model):
         lambda_cls_class = 1.0
         
         epsilon = 1e-4
+        num_anchors = self.rpn.outputs[0].shape[3]
+        num_classes = int(self.frcnn.outputs[3].shape[2]/4)
+        
 
         def rpn_loss_regr(y_true, y_pred):
-            x = y_true - y_pred
+            x = y_true[:, :, :, 4 * num_anchors:] - y_pred
             x_abs = K.abs(x)
             x_bool = K.cast(K.less_equal(x_abs, 1.0), tf.float32)
-            return lambda_rpn_regr * K.sum((
-       			y_true * (x_bool * (0.5 * x * x) + (1 - x_bool) * (x_abs - 0.5))), axis=[1, 2, 3]) / K.sum((epsilon + y_true), axis=[1, 2, 3])
-        
+
+            return lambda_rpn_regr * K.sum((y_true[:, :, :, :4 * num_anchors] * (x_bool * (0.5 * x * x) + (1 - x_bool) * (x_abs - 0.5))), axis=[1, 2, 3]) / K.sum((epsilon + y_true[:, :, :, :4 * num_anchors]), axis=[1, 2, 3])
+
         def rpn_loss_cls(y_true, y_pred):
-            return lambda_rpn_class * K.sum((y_true * K.binary_crossentropy(y_pred, y_true)), axis=[1, 2, 3]) / K.sum((epsilon + y_true), axis=[1, 2, 3])
+            #return lambda_rpn_class * K.sum((y_true * K.binary_crossentropy(y_pred, y_true)), axis=[1, 2, 3]) / K.sum((epsilon + y_true), axis=[1, 2, 3])
+            return lambda_rpn_class * K.sum((y_true[:, :, :, :num_anchors] * K.binary_crossentropy(y_pred[:, :, :, :], y_true[:, :, :, num_anchors:])), axis=[1, 2, 3]) / K.sum((epsilon + y_true[:, :, :, :num_anchors]), axis=[1, 2, 3])
 
         def class_loss_regr(y_true, y_pred):
+
             def class_loss_regr_fixed_num(y_true, y_pred):
-                x = y_true - y_pred
+                x = y_true[:, :, 4*num_classes:] - y_pred
                 x_abs = K.abs(x)
                 x_bool = K.cast(K.less_equal(x_abs, 1.0), 'float32')
-                return lambda_cls_regr * K.sum((y_true * (x_bool * (0.5 * x * x) + (1 - x_bool) * (x_abs - 0.5))), axis=[1, 2]) / K.sum((epsilon + y_true), axis=[1, 2])
+                return lambda_cls_regr * K.sum((y_true[:, :, :4*num_classes] * (x_bool * (0.5 * x * x) + (1 - x_bool) * (x_abs - 0.5))), axis=[1, 2]) / K.sum((epsilon + y_true[:, :, :4*num_classes]), axis=[1, 2])
+            
             return class_loss_regr_fixed_num(y_true, y_pred)
 
         
@@ -70,17 +75,6 @@ class FRCNN(keras.Model):
         class_loss_regr = class_loss_regr(frcnn_targets[3], frcnn_pred[3])
 
         return [rpn_loss_cls, rpn_loss_regr, class_loss_cls, class_loss_regr]
-    
-    @tf.function
-    def grads(self, X, Y):   
-        with tf.GradientTape() as tape:
-            # Forward pass
-            frcnn_pred = self(X, training=True)
-            loss = self.compute_loss(frcnn_pred, Y)
-        # Backward pass
-        gradients = tape.gradient(loss, self.trainable_variables)
-        self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
-        return loss
     
     def train_step(self, batch):
 

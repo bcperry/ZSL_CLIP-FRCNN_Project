@@ -3,8 +3,6 @@ import copy
 import math
 
 from . import data_generators
-from . import config
-from . import train_helpers
 
 
 def calc_iou(C, R, img_data):
@@ -20,10 +18,10 @@ def calc_iou(C, R, img_data):
 
     for bbox_num, bbox in enumerate(bboxes):
         # get the GT box coordinates, and resize to account for image resizing
-        gta[bbox_num, 0] = int(round(bbox['x1'] * (resized_width / float(width))/C.rpn_stride))
-        gta[bbox_num, 1] = int(round(bbox['x2'] * (resized_width / float(width))/C.rpn_stride))
-        gta[bbox_num, 2] = int(round(bbox['y1'] * (resized_height / float(height))/C.rpn_stride))
-        gta[bbox_num, 3] = int(round(bbox['y2'] * (resized_height / float(height))/C.rpn_stride))
+        gta[bbox_num, 0] = bbox['x1'] * (resized_width / float(width))/C.rpn_stride
+        gta[bbox_num, 1] = bbox['x2'] * (resized_width / float(width))/C.rpn_stride
+        gta[bbox_num, 2] = bbox['y1'] * (resized_height / float(height))/C.rpn_stride
+        gta[bbox_num, 3] = bbox['y2'] * (resized_height / float(height))/C.rpn_stride
 
     x_roi = []
     y_class_num = []
@@ -35,11 +33,6 @@ def calc_iou(C, R, img_data):
     for ix in range(R.shape[0]):
 
         (x1, y1, x2, y2) = R[ix, :]
-        x1 = int(round(x1))
-        y1 = int(round(y1))
-        x2 = int(round(x2))
-        y2 = int(round(y2))
-        
 
         best_iou = 0.0
         best_bbox = -1

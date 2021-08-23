@@ -28,6 +28,7 @@ class Dual_FRCNN(keras.Model):
         self.feature_map_width = feature_map_width
         self.feature_map_height = feature_map_height
         self.temperature = C.temperature
+        self.prev_batch = None
         #self.loss_tracker = keras.metrics.Mean(name="loss")
     
     def call(self, X, training=False):
@@ -48,10 +49,7 @@ class Dual_FRCNN(keras.Model):
         return image_embedding, text_embedding
     
     def compute_loss(self, frcnn_pred, text_embedding, frcnn_targets):
-        
-        num_anchors = self.frcnn.output_shape[0][3]
-        num_classes = self.C.class_mapping[max(self.C.class_mapping, key=self.C.class_mapping.get)] + 1
-        
+
         lambda_rpn_regr = 1.0
         lambda_rpn_class = 1.0
         
@@ -59,26 +57,33 @@ class Dual_FRCNN(keras.Model):
         lambda_cls_class = 1.0
         
         epsilon = 1e-4
+        num_anchors = self.rpn.outputs[0].shape[3]
+        num_classes = int(self.frcnn.outputs[3].shape[2]/4)
         
+
         def rpn_loss_regr(y_true, y_pred):
-       
-       		x = y_true - y_pred
-       		x_abs = K.abs(x)
-       		x_bool = K.cast(K.less_equal(x_abs, 1.0), tf.float32)
-       
-       		return lambda_rpn_regr * K.sum((
-       			y_true * (x_bool * (0.5 * x * x) + (1 - x_bool) * (x_abs - 0.5))), axis=[1, 2, 3]) / K.sum((epsilon + y_true), axis=[1, 2, 3])
-        
-       	def rpn_loss_cls(y_true, y_pred):
-               return lambda_rpn_class * K.sum((y_true * K.binary_crossentropy(y_pred, y_true)), axis=[1, 2, 3]) / K.sum((epsilon + y_true), axis=[1, 2, 3])
+            x = y_true[:, :, :, 4 * num_anchors:] - y_pred
+            x_abs = K.abs(x)
+            x_bool = K.cast(K.less_equal(x_abs, 1.0), tf.float32)
+            return lambda_rpn_regr * K.sum((y_true[:, :, :, :4 * num_anchors] * (x_bool * (0.5 * x * x) + (1 - x_bool) * (x_abs - 0.5))), axis=[1, 2, 3]) / K.sum((epsilon + y_true[:, :, :, :4 * num_anchors]), axis=[1, 2, 3])
+
+        def rpn_loss_cls(y_true, y_pred):
+            #return lambda_rpn_class * K.sum((y_true * K.binary_crossentropy(y_pred, y_true)), axis=[1, 2, 3]) / K.sum((epsilon + y_true), axis=[1, 2, 3])
+            return lambda_rpn_class * K.sum((y_true[:, :, :, :num_anchors] * K.binary_crossentropy(y_pred[:, :, :, :], y_true[:, :, :, num_anchors:])), axis=[1, 2, 3]) / K.sum((epsilon + y_true[:, :, :, :num_anchors]), axis=[1, 2, 3])
 
         def class_loss_regr(y_true, y_pred):
+
             def class_loss_regr_fixed_num(y_true, y_pred):
-                x = y_true - y_pred
+                x = y_true[:, :, 4*num_classes:] - y_pred
                 x_abs = K.abs(x)
                 x_bool = K.cast(K.less_equal(x_abs, 1.0), 'float32')
-                return lambda_cls_regr * K.sum((y_true * (x_bool * (0.5 * x * x) + (1 - x_bool) * (x_abs - 0.5))), axis=[1, 2]) / K.sum((epsilon + y_true), axis=[1, 2])
+                return lambda_cls_regr * K.sum((y_true[:, :, :4*num_classes] * (x_bool * (0.5 * x * x) + (1 - x_bool) * (x_abs - 0.5))), axis=[1, 2]) / K.sum((epsilon + y_true[:, :, :4*num_classes]), axis=[1, 2])
+            
             return class_loss_regr_fixed_num(y_true, y_pred)
+
+        
+        def class_loss_cls(y_true, y_pred):
+            return lambda_cls_class * K.mean(categorical_crossentropy(y_true, y_pred), axis=[1])
 
         
         def dual_loss_cls(text_embedding, image_embeddings):
@@ -139,14 +144,19 @@ class Dual_FRCNN(keras.Model):
         
         X, Y, pos_samples, discard, text_batch = train_helpers.second_stage_helper(X, P_rpn, img_data, C)
         
+        if X is None:
+            #revert and train on the previous batch
+            #TODO: this is a hack, fix it later it can fail on the first batch.
+            print("The RPN failed to propose useable regions in this batch, reverting to training on last good training batch")
+            X, text_batch, Y = self.prev_batch
         #check if the batch is empty and skip it
         if X[0][0].shape == 0:
             print('error: no images in batch - dual_frcnn.py line 169')
-            #continue
         
         if text_batch.shape[0] != X[0].shape[0]:
             print('DEBUGGING: dual_frcnn line 173')
         if text_batch.shape[0] != C.batch_size:
+            #TODO: check
             print('DEBUGGING: small batch')
             
         with tf.GradientTape() as tape:
@@ -159,6 +169,7 @@ class Dual_FRCNN(keras.Model):
         # Monitor loss
         #self.loss_tracker.update_state(loss)
         total_loss = np.average((loss[0].numpy() + loss[1].numpy() + np.average(loss[2].numpy()) + loss[3].numpy()) / 4)
+        self.prev_batch = [X, text_batch, Y]
         return {"rpn_loss_cls": loss[0].numpy(), "rpn_loss_regr": loss[1].numpy(), "embedding_loss": loss[2].numpy(), "class_loss_regr": loss[3].numpy(), "total_loss": total_loss}
 
     def test_step(self, batch):

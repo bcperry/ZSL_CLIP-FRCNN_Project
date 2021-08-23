@@ -69,7 +69,7 @@ def get_data_parallel(inputs):
     
     
     #R input and output are in feature space
-    R = roi_helpers.rpn_to_roi(C, P_rpn[0], P_rpn[1], use_regr=True, overlap_thresh=0.1, max_boxes=900)
+    R = roi_helpers.rpn_to_roi(C, P_rpn[0], P_rpn[1], use_regr=True, overlap_thresh=0.3, max_boxes=900)
 
     # note: calc_iou converts from (x1,y1,x2,y2) to (x,y,w,h) format
     X2, Y1, Y2, IouS, class_text = roi_helpers.calc_iou(C, R, img_data)
@@ -146,7 +146,13 @@ def parallelize(C, X, img_data, P_rpn):
     
     batch_pos_samples = 0
     bad_images = 0
-    
+        
+    #for debugging
+    '''
+    for im in range(X.shape[0]):
+        get_data_parallel([C, X[im], img_data[im], [P_rpn[0][im:im+1], P_rpn[1][im:im+1]]])
+   '''
+
     with ThreadPoolExecutor(max_workers=C.batch_size) as executor:
         futures = [executor.submit(get_data_parallel, [C, X[im], img_data[im], [P_rpn[0][im:im+1], P_rpn[1][im:im+1]]]) for im in range(X.shape[0])]
     for future in as_completed(futures):
@@ -173,6 +179,10 @@ def parallelize(C, X, img_data, P_rpn):
         Y2_batch.append(Y2)
         text_batch.append(text)
         batch_pos_samples = batch_pos_samples + len(pos_samples)
+        
+    if bad_images == C.batch_size:
+        print('no valid images were found')
+        return(None, None, None, None)
     
     #if we ignored any images, replace them with the last good image.  otherwise, the model will not update properly
     for i in range(bad_images):
@@ -199,14 +209,13 @@ def second_stage_helper(X, P_rpn, img_data, C):
     
     X, Y, pos_samples, text_batch = parallelize(C, X, img_data, P_rpn)
     
+    if X is None:
+        return(None, None, None, None, None)
+    
     if X[0].shape[0] != C.batch_size:
         discard = C.batch_size - X[0].shape[0]
     else:
         discard = 0
-    
-    Y[0] = Y[0][:,:,:, :int(Y[0].shape[3]/2)]
-    Y[1] = Y[1][:,:,:, :int(Y[1].shape[3]/2)]
-    Y[3] = Y[3][:,:, :int(Y[3].shape[2]/2)]
-    
+
     return X, Y, pos_samples, discard, text_batch
     

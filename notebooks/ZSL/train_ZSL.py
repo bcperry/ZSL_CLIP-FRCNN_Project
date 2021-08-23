@@ -12,15 +12,14 @@ from tensorflow.keras import callbacks as callbacks
 from tensorflow.keras.callbacks import Callback
 
 from keras_frcnn import config
-from keras_frcnn import losses as losses
 from keras_frcnn import resnet as nn
 from keras_frcnn import train_helpers
 from keras_frcnn.dual_frcnn import Dual_FRCNN
 from keras_frcnn.frcnn import FRCNN
 from keras_frcnn import CLIP
 
+
 from keras_frcnn.tfrecord_parser import get_data
-from tensorflow.keras import layers
 import tensorflow as tf
 
 parser = argparse.ArgumentParser()
@@ -177,6 +176,7 @@ while steps_per_epoch >= 2000:
 #this will reduce the amount of validataion data used to generate validation losses
 while validation_steps >= 500:
     validation_steps = int(validation_steps / 2)
+    
 
 if model_type == 'ZSL':
     with strategy.scope():
@@ -205,7 +205,7 @@ if model_type == 'ZSL':
 else:
     with strategy.scope():
         FRCNN = FRCNN(model_rpn, model_all, C)
-        FRCNN.compile(optimizer= optimizer, run_eagerly=True)#-----------------------------------------------------------------asdfasdf-asdfasdfkasjdfhadhfjdfdf--------------------------------------
+        FRCNN.compile(optimizer= optimizer, run_eagerly=True)
     FRCNN.fit(x=train_dataset, epochs=C.num_epochs, verbose='auto', steps_per_epoch=steps_per_epoch, validation_steps=validation_steps, validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint, LogRunMetrics()])
     
     

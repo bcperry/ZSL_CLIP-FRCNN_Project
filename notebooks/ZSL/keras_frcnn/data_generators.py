@@ -2,10 +2,8 @@ from __future__ import absolute_import
 import numpy as np
 import random
 from . import data_augment
-import threading
 import itertools
-from . import config
-import tensorflow as tf
+
 
 def union(au, bu, area_intersection):
     area_a = (au[2] - au[0]) * (au[3] - au[1])
@@ -249,12 +247,7 @@ def calc_rpn(C, img_data, output_width, output_height):
 def calc_targets(C, x_img, img_data, feature_map_width, feature_map_height):
 
     y_rpn_cls, y_rpn_regr = calc_rpn(C, img_data, feature_map_width, feature_map_height)
-    '''
-    try:
-        y_rpn_cls, y_rpn_regr = calc_rpn(img_data, feature_map_width, feature_map_height)
-    except:
-        print('Error calculating the truth values for the rpn in data generators calc_targets function')
-    '''
+
     # Zero-center by mean pixel, and preprocess image
 
     x_img = x_img[:,:, (2, 1, 0)]  # BGR -> RGB
