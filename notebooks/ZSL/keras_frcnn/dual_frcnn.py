@@ -68,7 +68,6 @@ class Dual_FRCNN(keras.Model):
             return lambda_rpn_regr * K.sum((y_true[:, :, :, :4 * num_anchors] * (x_bool * (0.5 * x * x) + (1 - x_bool) * (x_abs - 0.5))), axis=[1, 2, 3]) / K.sum((epsilon + y_true[:, :, :, :4 * num_anchors]), axis=[1, 2, 3])
 
         def rpn_loss_cls(y_true, y_pred):
-            #return lambda_rpn_class * K.sum((y_true * K.binary_crossentropy(y_pred, y_true)), axis=[1, 2, 3]) / K.sum((epsilon + y_true), axis=[1, 2, 3])
             return lambda_rpn_class * K.sum((y_true[:, :, :, :num_anchors] * K.binary_crossentropy(y_pred[:, :, :, :], y_true[:, :, :, num_anchors:])), axis=[1, 2, 3]) / K.sum((epsilon + y_true[:, :, :, :num_anchors]), axis=[1, 2, 3])
 
         def class_loss_regr(y_true, y_pred):
@@ -141,7 +140,7 @@ class Dual_FRCNN(keras.Model):
         img_data = img_data_temp
         
         P_rpn = self.rpn(X, training = False)
-        
+
         X, Y, pos_samples, discard, text_batch = train_helpers.second_stage_helper(X, P_rpn, img_data, C)
         
         if X is None:
@@ -149,16 +148,7 @@ class Dual_FRCNN(keras.Model):
             #TODO: this is a hack, fix it later it can fail on the first batch.
             print("The RPN failed to propose useable regions in this batch, reverting to training on last good training batch")
             X, text_batch, Y = self.prev_batch
-        #check if the batch is empty and skip it
-        if X[0][0].shape == 0:
-            print('error: no images in batch - dual_frcnn.py line 154')
-        
-        if text_batch.shape[0] != X[0].shape[0]:
-            print('DEBUGGING: dual_frcnn line 157')
-        #if text_batch.shape[0] != C.batch_size:
-            #TODO: check
-            #print('DEBUGGING: small batch')
-            
+
         with tf.GradientTape() as tape:
             # Forward pass
             frcnn_pred, text_embedding = self([X, text_batch], training=True)

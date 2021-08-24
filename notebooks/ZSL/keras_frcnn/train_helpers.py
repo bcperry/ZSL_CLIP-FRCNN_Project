@@ -16,7 +16,7 @@ from concurrent.futures import as_completed
 
 def get_class_map(C):
     
-    label_file = glob.glob(C.train_path + '/*labels.txt')
+    label_file = glob.glob(C.data_path + C.class_text)
     class_mapping = {}
     file = open(label_file[0], "r")
     
@@ -36,7 +36,7 @@ def get_class_map(C):
     return class_mapping
 
 def get_class_text(C):
-    pickle_file = glob.glob(C.train_path + '/*.pickle')
+    pickle_file = glob.glob(C.data_path + C.text_dict_pickle)
     class_text = pd.read_pickle(pickle_file[0])
     class_text_mapping = {}
     
@@ -150,7 +150,7 @@ def parallelize(C, X, img_data, P_rpn):
     '''
     for im in range(X.shape[0]):
         get_data_parallel([C, X[im], img_data[im], [P_rpn[0][im:im+1], P_rpn[1][im:im+1]]])
-   '''
+    '''
 
     with ThreadPoolExecutor(max_workers=C.batch_size) as executor:
         futures = [executor.submit(get_data_parallel, [C, X[im], img_data[im], [P_rpn[0][im:im+1], P_rpn[1][im:im+1]]]) for im in range(X.shape[0])]

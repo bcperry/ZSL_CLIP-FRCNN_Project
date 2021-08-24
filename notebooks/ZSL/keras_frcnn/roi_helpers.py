@@ -37,6 +37,8 @@ def calc_iou(C, R, img_data):
         best_iou = 0.0
         best_bbox = -1
         for bbox_num in range(len(bboxes)):
+            if class_mapping[bboxes[bbox_num]['class']] not in C.training_classes:
+                continue
             curr_iou = data_generators.iou([gta[bbox_num, 0], gta[bbox_num, 2], gta[bbox_num, 1], gta[bbox_num, 3]], [x1, y1, x2, y2])
             if curr_iou > best_iou:
                 best_iou = curr_iou
@@ -70,9 +72,14 @@ def calc_iou(C, R, img_data):
                 print('roi = {}'.format(best_iou))
                 raise RuntimeError
         
-        num_classes = class_mapping[max(class_mapping, key=class_mapping.get)] + 1
-        class_num = class_mapping[cls_name]
-        class_text.append(C.class_text[class_num])
+        num_classes = len(C.training_classes) + 1
+        #find the mapping between the class name and the xview id, then the xview id and the total number of ids
+        if cls_name == 'bg':
+            class_num = 0
+        else:
+            class_num = C.training_classes.index(class_mapping[cls_name])
+
+        class_text.append(C.class_text[class_mapping[cls_name]])
         class_label = (num_classes) * [0] #add 1 here to account for the 0 class
         class_label[class_num] = 1
         y_class_num.append(copy.deepcopy(class_label))

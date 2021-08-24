@@ -1,25 +1,14 @@
 import tensorflow as tf
 import glob
-from . import config
 import numpy
 
 
 def batch_processor(batch, C):
     
-    label_file = glob.glob(C.train_path + '/*labels.txt')
-    
-    classes_count = {}
     imgs = {}
-    class_mapping = {}
     #read in the class labels
-    class_dict = {}
-    file = open(label_file[0], "r")
+    class_dict = C.class_dict
 
-    #create a class label dictionary
-    for line in file:
-        key, value = line.split(':')
-        class_dict[int(key)] = value.strip()
-        
         
     for im in range(batch['image'].numpy().shape[0]):
 
@@ -71,17 +60,11 @@ def batch_processor(batch, C):
     return imgs
 
 
-def get_data(data_type, C):
-    found_bg = False
-    all_imgs = {}
-
-    classes_count = {}
-
-    class_mapping = {}
+def get_data(path, C):
     
-    label_file = glob.glob(C.train_path + '/*labels.txt')
+    label_file = glob.glob(C.data_path + C.class_text)
     
-    record_file = glob.glob(C.train_path + "/*" + data_type + "*.record")
+    record_file = glob.glob(C.data_path + path)
 
     #read in the class labels
     class_dict = {}
@@ -91,7 +74,7 @@ def get_data(data_type, C):
     for line in file:
         key, value = line.split(':')
         class_dict[int(key)] = value.strip()
-        
+    C.class_dict = class_dict   
     #for debugging within tf.function
 
     #import pdb
@@ -122,7 +105,6 @@ def get_data(data_type, C):
             features = tf.io.parse_single_example(example, feature_description)
             raw_image = tf.image.decode_jpeg(features['image/encoded'], channels=3)
             features["image"] = tf.cast(tf.image.resize(raw_image, size=(C.im_size, C.im_size)), tf.uint8)
-            features['roi_input'] =  numpy.zeros((C.num_rois,4))
             
             features.pop("image/encoded")
             features.pop("image/format")
@@ -145,11 +127,7 @@ def get_data(data_type, C):
             )
 
         
-        
-        batch_size = C.batch_size
-        TFdataset = get_dataset(C.train_path + "/*" + data_type + "*.record", batch_size)
-
-        record_file = glob.glob(C.train_path + "/*" + data_type + "*.record")
+        TFdataset = get_dataset(record_file, C.batch_size)
         
         total_records = sum(1 for _ in tf.data.TFRecordDataset(record_file[0]))
         print("total records in the TFrecord file is : " + str(total_records))

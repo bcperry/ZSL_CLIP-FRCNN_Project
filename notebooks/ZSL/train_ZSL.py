@@ -2,7 +2,7 @@ from __future__ import division
 import re
 import argparse
 import os
-
+import glob
 
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.layers import Input
@@ -73,15 +73,16 @@ if model_path_regex.group(2) != '.hdf5':
     exit(1)
 
 
-train_dataset, total_train_records = get_data('train', C)
-val_dataset, total_val_records = get_data('test', C)
+train_dataset, total_train_records = get_data(C.train_path, C)
+val_dataset, total_val_records = get_data(C.val_path, C)
 
 C.class_mapping = train_helpers.get_class_map(C)
 
 C.class_text = train_helpers.get_class_text(C)
 
 #find the largest class id and add 1 for the background class
-num_ids = C.class_mapping[max(C.class_mapping, key=C.class_mapping.get)] + 1
+#num_ids = C.class_mapping[max(C.class_mapping, key=C.class_mapping.get)] + 1
+num_ids = len(C.training_classes) + 1
 
 print(f'Num train samples {total_train_records}')
 print(f'Num val samples {total_val_records}')
@@ -126,27 +127,50 @@ with strategy.scope():
         model_all = Model([shared_layers.input, roi_input], rpn[:2] + classifier)
 
 print('Models sucessfully built.')
+start_epoch = 0
+#check if model has already started training by checking for a model in the outputs folder
+if os.path.isdir('./outputs/model/') and C.input_weight_path is None:
 
+    fine_tune = None
+    epoch_weights = None
+    files = glob.glob('./outputs/model/*')
+    
+    for file in files:
+        fine_tune = re.search('fine_tune_epoch', file)
+        if fine_tune is not None:
+            fine_tune_weights = file
+        else:
+            epoch = int(re.search('epoch(.+?)-', file).group(1))
+            
+            if epoch > start_epoch:
+                epoch_weights = file
+                start_epoch = epoch
+    if fine_tune is not None:
+        start_epoch += 1
+        C.input_weight_path = fine_tune_weights
+    else:
+        C.input_weight_path = epoch_weights
+
+#load weights to the model
 try:
     if (C.input_weight_path == None):
         print('Loaded imagenet weights to the vision backbone.')
     else:
-        print('loading FRCNN weights from {C.input_weight_path}')
+        print(f'loading FRCNN weights from {C.input_weight_path}')
         model_all.load_weights(C.input_weight_path, by_name=True)
     if model_type == 'ZSL':
         if (C.input_weight_path == None):
             print('Loaded pretrained BERT weights to the text encoder.')
         else:
-            print('loading text_encoder weights from {C.input_weight_path}')
+            print(f'loading text_encoder weights from {C.input_weight_path}')
             text_encoder.load_weights(C.input_weight_path, by_name=True)
 except:
     print('Could not load pretrained model weights.')
 
-optimizer = Adam()
+optimizer = Adam(clipnorm=1.0)
+#set a very small learning rate for the final pass
+full_optimizer = Adam(learning_rate=1e-5, clipnorm=1.0)
 print('Starting training')
-
-vis = True
-
 
 #Azure note:
     # create a ./outputs/model folder in the compute target
@@ -182,14 +206,13 @@ if model_type == 'ZSL':
     with strategy.scope():
         Dual_FRCNN = Dual_FRCNN(model_rpn, model_all, text_encoder, C)
         Dual_FRCNN.compile(optimizer= optimizer, run_eagerly = True)
-    Dual_FRCNN.fit(x=train_dataset, epochs=C.num_epochs, verbose='auto', steps_per_epoch=steps_per_epoch, validation_steps=validation_steps, validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint, LogRunMetrics()])
+    Dual_FRCNN.fit(x=train_dataset, epochs=C.num_epochs, initial_epoch  = start_epoch, verbose='auto', validation_data=val_dataset, callbacks=[reduce_lr, checkpoint, LogRunMetrics()])
         
     
     print('Primary training complete, starting fine tuning for 1 epoch.')
     #set all layers of the FRCNN model to trainable, however we dont set the BERT model layers trainable
     model_all.trainable = True
-    #set a very small learning rate
-    optimizer = Adam(learning_rate=1e-5)
+
     
 
     checkpoint_path = './outputs/model/ZSL_FRCNN_fine_tune_epoch-total_loss-{total_loss:.2f}.hdf5'        
@@ -200,20 +223,19 @@ if model_type == 'ZSL':
     
     #recompile the model
     with strategy.scope():
-        Dual_FRCNN.compile(optimizer= optimizer, run_eagerly=True)
+        Dual_FRCNN.compile(optimizer= full_optimizer, run_eagerly=True)
     Dual_FRCNN.fit(x=train_dataset, epochs=1, verbose='auto', steps_per_epoch=steps_per_epoch, validation_steps=validation_steps, validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint, LogRunMetrics()])
 else:
     with strategy.scope():
         FRCNN = FRCNN(model_rpn, model_all, C)
         FRCNN.compile(optimizer= optimizer, run_eagerly=True)
-    FRCNN.fit(x=train_dataset, epochs=C.num_epochs, verbose='auto', steps_per_epoch=steps_per_epoch, validation_steps=validation_steps, validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint, LogRunMetrics()])
+    FRCNN.fit(x=train_dataset, epochs=C.num_epochs, initial_epoch  = start_epoch, verbose='auto', validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint, LogRunMetrics()])
     
     
     print('Primary training complete, starting fine tuning for 1 epoch.')
     #set all layers of the model to trainable
     FRCNN.trainable = True
-    #set a very small learning rate
-    optimizer = Adam(learning_rate=1e-5)
+
     
     #set up callbacks
     checkpoint_path = './outputs/model/FRCNN_fine_tune_epoch-total_loss-{total_loss:.2f}.hdf5'
@@ -221,5 +243,5 @@ else:
     
     with strategy.scope():
         #recompile the model
-        FRCNN.compile(optimizer= optimizer, run_eagerly=True)
+        FRCNN.compile(optimizer= full_optimizer, run_eagerly=True)
     FRCNN.fit(x=train_dataset, epochs=1, verbose='auto', steps_per_epoch=steps_per_epoch, validation_steps=validation_steps, validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint, LogRunMetrics()])
