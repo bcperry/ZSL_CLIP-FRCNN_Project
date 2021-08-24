@@ -206,7 +206,7 @@ if model_type == 'ZSL':
     with strategy.scope():
         Dual_FRCNN = Dual_FRCNN(model_rpn, model_all, text_encoder, C)
         Dual_FRCNN.compile(optimizer= optimizer, run_eagerly = True)
-    Dual_FRCNN.fit(x=train_dataset, epochs=C.num_epochs, initial_epoch  = start_epoch, verbose='auto', validation_data=val_dataset, callbacks=[reduce_lr, checkpoint, LogRunMetrics()])
+    Dual_FRCNN.fit(x=train_dataset, epochs=C.num_epochs, steps_per_epoch = steps_per_epoch, validation_steps = validation_steps, initial_epoch = start_epoch, verbose='auto', validation_data=val_dataset, callbacks=[reduce_lr, checkpoint, LogRunMetrics()])
         
     
     print('Primary training complete, starting fine tuning for 1 epoch.')
@@ -229,7 +229,7 @@ else:
     with strategy.scope():
         FRCNN = FRCNN(model_rpn, model_all, C)
         FRCNN.compile(optimizer= optimizer, run_eagerly=True)
-    FRCNN.fit(x=train_dataset, epochs=C.num_epochs, initial_epoch  = start_epoch, verbose='auto', validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint, LogRunMetrics()])
+    FRCNN.fit(x=train_dataset, epochs=C.num_epochs, steps_per_epoch = steps_per_epoch, validation_steps = validation_steps, initial_epoch = start_epoch, verbose='auto', validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint, LogRunMetrics()])
     
     
     print('Primary training complete, starting fine tuning for 1 epoch.')

@@ -23,7 +23,7 @@ class Config:
         
         self.text_dict_pickle = r"xview_attribute_dict_text.pickle"
         
-        self.batch_size = 4
+        self.batch_size = 10
         
         #CLIP projection settings
         
