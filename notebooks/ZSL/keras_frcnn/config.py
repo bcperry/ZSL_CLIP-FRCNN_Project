@@ -16,12 +16,11 @@ class Config:
         self.output_weight_path = r'C:\Data_drive\workspace\FRCNN\model.hdf5'
         
         #path to the input weights. If trainining for the first time use None to load imagenet weights and/ or standard BERT weights
-        self.image_input_weight_path = None
-        self.text_input_weight_path = None
+        self.input_weight_path = None
         
         self.text_dict_pickle = r'C:\Users\blain\Downloads\xview_attribute_dict_text.pickle'
         
-        self.batch_size = 10
+        self.batch_size = 8
         
         #CLIP projection settings
         

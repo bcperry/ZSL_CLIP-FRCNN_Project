@@ -146,7 +146,6 @@ def parallelize(C, X, img_data, P_rpn):
     
     batch_pos_samples = 0
     bad_images = 0
-        
     #for debugging
     '''
     for im in range(X.shape[0]):
@@ -180,7 +179,7 @@ def parallelize(C, X, img_data, P_rpn):
         text_batch.append(text)
         batch_pos_samples = batch_pos_samples + len(pos_samples)
         
-    if bad_images == C.batch_size:
+    if bad_images == X.shape[0]:
         print('no valid images were found')
         return(None, None, None, None)
     
