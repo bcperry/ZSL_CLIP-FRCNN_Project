@@ -123,7 +123,7 @@ def get_data(path, C):
                 )
                 .shuffle(batch_size * 10)
                 .prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
-                .batch(batch_size)
+                .batch(batch_size, drop_remainder = True)
                 .repeat()
             )
 
