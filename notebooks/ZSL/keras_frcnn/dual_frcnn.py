@@ -18,6 +18,7 @@ from keras_frcnn.tfrecord_parser import batch_processor
 
 
 class Dual_FRCNN(keras.Model):
+    #def __init__(self, rpn, frcnn, text_encoder, C, **kwargs):
     def __init__(self, rpn, frcnn, text_encoder, C, **kwargs):
         super(Dual_FRCNN, self).__init__(**kwargs)
         self.rpn = rpn
@@ -36,13 +37,13 @@ class Dual_FRCNN(keras.Model):
         # TF will fallback on available devices if there are fewer than 2 GPUs.
         text_inputs = X[1]
         text_embedding = []
-        with tf.device("/gpu:0"):
+        with tf.device("/gpu:1"):
             # Get the embeddings for the captions.
             for im in range(len(text_inputs)):
                 text_embedding.append(self.text_encoder(text_inputs[im], training=training))
                  
         text_embedding = tf.stack(text_embedding, axis=0)
-        with tf.device("/gpu:1"):
+        with tf.device("/gpu:0"):
             # Get the embeddings for the images.
             image_embedding = self.frcnn(X[0], training=training)
 
@@ -142,6 +143,15 @@ class Dual_FRCNN(keras.Model):
         P_rpn = self.rpn(X, training = False)
 
         X, Y, pos_samples, discard, text_batch = train_helpers.second_stage_helper(X, P_rpn, img_data, C)
+        
+
+        #TODO: TEST
+        bert_embeddings = np.zeros(shape=(text_batch.shape[0], text_batch.shape[1], 512), dtype=float)
+        for i,im in enumerate(text_batch):
+            for j,text in enumerate(im):        
+                bert_embeddings[i][j] = train_helpers.bert_embed(text, C)
+        text_batch = bert_embeddings
+        #TODO: TEST
         
         if X is None:
             #revert and train on the previous batch

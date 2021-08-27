@@ -14,6 +14,11 @@ import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import as_completed
 
+def bert_embed(text, C):
+    index =  C.class_text.index(text)
+    embed = C.bert_embeddings[index]
+    return embed
+
 def get_class_map(C):
     
     label_file = glob.glob(C.data_path + C.class_text)

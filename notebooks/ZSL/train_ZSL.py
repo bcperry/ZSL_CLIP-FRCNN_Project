@@ -4,6 +4,7 @@ import argparse
 import os
 import glob
 
+import tensorflow as tf
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.layers import Input
 from tensorflow.keras.models import Model
@@ -20,7 +21,21 @@ from keras_frcnn import CLIP
 
 
 from keras_frcnn.tfrecord_parser import get_data
-import tensorflow as tf
+
+
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+  try:
+    # Currently, memory growth needs to be the same across GPUs
+    for gpu in gpus:
+      tf.config.experimental.set_memory_growth(gpu, True)
+    logical_gpus = tf.config.list_logical_devices('GPU')
+    print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+  except RuntimeError as e:
+    # Memory growth must be set before GPUs have been initialized
+    print(e)
+
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--data-folder', type=str, dest='test_tfrecords_dir', default=None, help='data folder containing tfrecord files and label file')
@@ -78,10 +93,12 @@ val_dataset, total_val_records = get_data(C.val_path, C)
 
 C.class_mapping = train_helpers.get_class_map(C)
 
-C.class_text = train_helpers.get_class_text(C)
+if C.text_dict_pickle is not None:
+    C.class_text = train_helpers.get_class_text(C)
+else:
+    C.class_text = [f"This is a picture of a {key}" for key in C.class_mapping.keys()]
 
 #find the largest class id and add 1 for the background class
-#num_ids = C.class_mapping[max(C.class_mapping, key=C.class_mapping.get)] + 1
 num_ids = len(C.training_classes) + 1
 
 print(f'Num train samples {total_train_records}')
@@ -95,7 +112,7 @@ roi_input = Input(shape=(C.num_rois, 4))
 print('Building models.')
 # Create a MirroredStrategy.
 strategy = tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.ReductionToOneDevice())
-#strategy = tf.distribute.get_strategy()
+strategy = tf.distribute.get_strategy()
 print('Number of devices: {}'.format(strategy.num_replicas_in_sync))
 # Open a strategy scope.
 with strategy.scope():
@@ -120,7 +137,12 @@ with strategy.scope():
         # this is a model that holds both the RPN and the classifier, used to train the model end to end
         model_all = Model([shared_layers.input, roi_input], rpn[:2] + classifier_ZSL)
         #build the text encoder
-        text_encoder = CLIP.create_text_encoder(C)
+        text_base_embedding, text_encoder = CLIP.create_text_encoder(C)
+        #TODO: TEST
+        
+        C.bert_embeddings = text_base_embedding.predict(tf.convert_to_tensor(C.class_text))
+        #TODO: TEST
+
     else:
         classifier = nn.classifier(shared_layers.output, roi_input, C.num_rois, nb_classes=num_ids, trainable=True)
         # this is a model that holds both the RPN and the classifier, used to train the model end to end
@@ -146,7 +168,7 @@ if os.path.isdir('./outputs/model/') and C.input_weight_path is None:
                 epoch_weights = file
                 start_epoch = epoch
     if fine_tune is not None:
-        start_epoch += 1
+        start_epoch = 0
         C.input_weight_path = fine_tune_weights
     else:
         C.input_weight_path = epoch_weights
@@ -163,6 +185,7 @@ try:
             print('Loaded pretrained BERT weights to the text encoder.')
         else:
             print(f'loading text_encoder weights from {C.input_weight_path}')
+            text_base_embedding.load_weights(C.input_weight_path, by_name=True)
             text_encoder.load_weights(C.input_weight_path, by_name=True)
 except:
     print('Could not load pretrained model weights.')
@@ -206,7 +229,7 @@ if model_type == 'ZSL':
     with strategy.scope():
         Dual_FRCNN = Dual_FRCNN(model_rpn, model_all, text_encoder, C)
         Dual_FRCNN.compile(optimizer= optimizer, run_eagerly = True)
-    Dual_FRCNN.fit(x=train_dataset, epochs=C.num_epochs, steps_per_epoch = steps_per_epoch, validation_steps = validation_steps, initial_epoch = start_epoch, verbose='auto', validation_data=val_dataset, callbacks=[reduce_lr, checkpoint, LogRunMetrics()])
+    Dual_FRCNN.fit(x=train_dataset, epochs=C.num_epochs, steps_per_epoch = steps_per_epoch, validation_steps = validation_steps, initial_epoch = start_epoch, verbose='auto', validation_data=val_dataset, callbacks=[reduce_lr, checkpoint, early_stopping, LogRunMetrics()])
         
     
     print('Primary training complete, starting fine tuning for 1 epoch.')

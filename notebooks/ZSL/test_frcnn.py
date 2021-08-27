@@ -2,51 +2,33 @@ from __future__ import division
 import os
 import cv2
 import numpy as np
-import sys
-import pickle
 from optparse import OptionParser
 import time
-import tensorflow as tf
 from keras_frcnn import config
 from keras import backend as K
 from keras.layers import Input
 from keras.models import Model
-from keras.backend.tensorflow_backend import set_session
+from keras_frcnn import train_helpers
+
 from keras_frcnn import roi_helpers
-
-sys.setrecursionlimit(40000)
-
-config = tf.ConfigProto()
-config.gpu_options.allow_growth = True
-config.log_device_placement = True
-sess = tf.Session(config=config)
-set_session(sess)
+from tensorflow.keras.applications.resnet50 import ResNet50
+from keras_frcnn import resnet as nn
+from keras_frcnn import CLIP
 
 parser = OptionParser()
 
 parser.add_option("-p", "--path", dest="test_path", help="Path to test data.")
-parser.add_option("-n", "--num_rois", type="int", dest="num_rois",
-				help="Number of ROIs per iteration. Higher means more memory use.", default=32)
-parser.add_option("--config_filename", dest="config_filename", help=
-				"Location to read the metadata related to the training (generated when training).",
-				default="config.pickle")
-parser.add_option("--network", dest="network", help="Base network to use. Supports vgg or resnet50.", default='resnet50')
+
+parser.add_argument('--model-type', type=str, dest='model_type', default='ZSL', help='ZSL or FRCNN')
 
 (options, args) = parser.parse_args()
 
 if not options.test_path:   # if filename is not given
 	parser.error('Error: path to test data must be specified. Pass --path to command line')
 
+model_type = args.model_type
 
-config_output_filename = options.config_filename
-
-with open(config_output_filename, 'rb') as f_in:
-	C = pickle.load(f_in)
-
-if C.network == 'resnet50':
-	import keras_frcnn.resnet as nn
-elif C.network == 'vgg':
-	import keras_frcnn.vgg as nn
+C = config.Config()
 
 # turn off any data augmentation at test time
 C.use_horizontal_flips = False
@@ -99,53 +81,63 @@ def get_real_coordinates(ratio, x1, y1, x2, y2):
 
 	return (real_x1, real_y1, real_x2 ,real_y2)
 
-class_mapping = C.class_mapping
+C.class_mapping = train_helpers.get_class_map(C)
 
-if 'bg' not in class_mapping:
-	class_mapping['bg'] = len(class_mapping)
+if C.text_dict_pickle is not None:
+    C.class_text = train_helpers.get_class_text(C)
+else:
+    labels = 'test'
+    C.class_text = [f"This is a picture of a {key}" for key in C.class_mapping.keys()]
 
-class_mapping = {v: k for k, v in class_mapping.items()}
-print(class_mapping)
-class_to_color = {class_mapping[v]: np.random.randint(0, 255, 3) for v in class_mapping}
+class_to_color = {C.class_mapping[v]: np.random.randint(0, 255, 3) for v in C.class_mapping}
 C.num_rois = int(options.num_rois)
 
-if C.network == 'resnet50':
-	num_features = 1024
-elif C.network == 'vgg':
-	num_features = 512
 
-if K.common.image_dim_ordering() == 'th':
-	input_shape_img = (3, None, None)
-	input_shape_features = (num_features, None, None)
-else:
-	input_shape_img = (None, None, 3)
-	input_shape_features = (None, None, num_features)
-
-
-img_input = Input(shape=input_shape_img)
+#since we are using square images, we know the image size we will be scaling to
+input_shape_img = (C.im_size, C.im_size, 3)
 roi_input = Input(shape=(C.num_rois, 4))
-feature_map_input = Input(shape=input_shape_features)
 
-# define the base network (resnet here, can be VGG, Inception, etc)
-shared_layers = nn.nn_base(img_input, trainable=True)
+#find the largest class id and add 1 for the background class
+num_ids = len(C.training_classes) + 1
+
+# define the base network (resnet here)
+base_model = ResNet50(input_shape = input_shape_img, weights='imagenet', include_top=False)
+
+#freeze the feature extractor
+base_model.trainable = False
+
+shared_layers = Model(inputs=base_model.inputs, outputs=base_model.get_layer('conv4_block6_out').output)
 
 # define the RPN, built on the base layers
 num_anchors = len(C.anchor_box_scales) * len(C.anchor_box_ratios)
-rpn_layers = nn.rpn(shared_layers, num_anchors)
+rpn = nn.rpn(shared_layers.output, num_anchors)
+model_rpn = Model(shared_layers.input, rpn[:2])
 
-classifier = nn.classifier(feature_map_input, roi_input, C.num_rois, nb_classes=len(class_mapping), trainable=True)
+if model_type == 'ZSL':
+    classifier_ZSL = nn.classifier_ZSL(shared_layers.output, roi_input, C.num_rois, C.num_projection_layers, C.projection_dims, C.dropout_rate, nb_classes=num_ids, trainable=True)
+    # this is a model that holds both the RPN and the classifier, used to train the model end to end
+    model_all = Model([shared_layers.input, roi_input], rpn[:2] + classifier_ZSL)
+    #build the text encoder
+    text_encoder = CLIP.create_text_encoder(C)
+else:
+    classifier = nn.classifier(shared_layers.output, roi_input, C.num_rois, nb_classes=num_ids, trainable=True)
+    # this is a model that holds both the RPN and the classifier, used to train the model end to end
+    model_all = Model([shared_layers.input, roi_input], rpn[:2] + classifier)
+    
+#load weights to the model
+try:
 
-model_rpn = Model(img_input, rpn_layers)
-model_classifier_only = Model([feature_map_input, roi_input], classifier)
+    print(f'loading FRCNN weights from {C.input_weight_path}')
+    model_all.load_weights(C.input_weight_path, by_name=True)
+    if model_type == 'ZSL':
 
-model_classifier = Model([feature_map_input, roi_input], classifier)
+        print(f'loading text_encoder weights from {C.input_weight_path}')
+        text_encoder.load_weights(C.input_weight_path, by_name=True)
+except:
+    print('Could not load pretrained model weights.') 
 
-print(f'Loading weights from {C.model_path}')
-model_rpn.load_weights(C.model_path, by_name=True)
-model_classifier.load_weights(C.model_path, by_name=True)
 
-model_rpn.compile(optimizer='sgd', loss='mse')
-model_classifier.compile(optimizer='sgd', loss='mse')
+
 
 all_imgs = []
 
@@ -166,11 +158,10 @@ for idx, img_name in enumerate(sorted(os.listdir(img_path))):
 
 	X, ratio = format_img(img, C)
 
-	if K.common.image_dim_ordering() == 'tf':
-		X = np.transpose(X, (0, 2, 3, 1))
+	X = np.transpose(X, (0, 2, 3, 1))
 
 	# get the feature maps and output from the RPN
-	[Y1, Y2, F] = model_rpn.predict(X)
+	[Y1, Y2] = model_rpn.predict(X)
 	
 
 	R = roi_helpers.rpn_to_roi(Y1, Y2, C, K.common.image_dim_ordering(), overlap_thresh=0.7)
@@ -248,7 +239,7 @@ for idx, img_name in enumerate(sorted(os.listdir(img_path))):
 			cv2.rectangle(img, (textOrg[0] - 5,textOrg[1]+baseLine - 5), (textOrg[0]+retval[0] + 5, textOrg[1]-retval[1] - 5), (255, 255, 255), -1)
 			cv2.putText(img, textLabel, textOrg, cv2.FONT_HERSHEY_DUPLEX, 1, (0, 0, 0), 1)
 
-	print(f'Elapsed time = {time.time() - st)}'
+	print(f'Elapsed time = {(time.time() - st)}')
 	print(all_dets)
 
 	
