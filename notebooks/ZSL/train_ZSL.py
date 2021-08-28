@@ -3,7 +3,6 @@ import re
 import argparse
 import os
 import glob
-import datetime
 
 import tensorflow as tf
 from tensorflow.keras.optimizers import Adam
@@ -232,10 +231,6 @@ reduce_lr = callbacks.ReduceLROnPlateau(monitor="total_loss", factor=0.2, patien
 # Create an early stopping callback.
 early_stopping = callbacks.EarlyStopping(monitor="total_loss", patience=5, restore_best_weights=True)
 
-log_dir = "./outputs/logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
-
-
 #this will reduce the time between evaluation by shortening the epoch lenth to less than the full training dataset size
 steps_per_epoch = int(total_train_records / C.batch_size)
 validation_steps = int(total_val_records / C.batch_size)
@@ -247,10 +242,7 @@ while steps_per_epoch >= 2000:
 while validation_steps >= 50:
     validation_steps = int(validation_steps / 2)
     
-#TODO: delete this has no early stopping
-model.fit(x=train_dataset, epochs=C.num_epochs, steps_per_epoch = steps_per_epoch, validation_steps = validation_steps, initial_epoch = start_epoch, verbose='auto', validation_data=val_dataset, callbacks=[reduce_lr, tensorboard_callback, checkpoint, LogRunMetrics()])
-  
-#model.fit(x=train_dataset, epochs=C.num_epochs, steps_per_epoch = steps_per_epoch, validation_steps = validation_steps, initial_epoch = start_epoch, verbose='auto', validation_data=val_dataset, callbacks=[reduce_lr, tensorboard_callback, checkpoint, early_stopping, LogRunMetrics()])
+model.fit(x=train_dataset, epochs=C.num_epochs, steps_per_epoch = steps_per_epoch, validation_steps = validation_steps, initial_epoch = start_epoch, verbose='auto', validation_data=val_dataset, callbacks=[reduce_lr, checkpoint, early_stopping, LogRunMetrics()])
     
 
 print('Primary training complete, starting fine tuning for 1 epoch.')
