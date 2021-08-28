@@ -74,7 +74,7 @@ def get_data_parallel(inputs):
     
     
     #R input and output are in feature space
-    R = roi_helpers.rpn_to_roi(C, P_rpn[0], P_rpn[1], use_regr=True, overlap_thresh=0.3, max_boxes=900)
+    R = roi_helpers.rpn_to_roi(C, P_rpn[0], P_rpn[1], use_regr=True, overlap_thresh=0.7, max_boxes=300)
 
     # note: calc_iou converts from (x1,y1,x2,y2) to (x,y,w,h) format
     X2, Y1, Y2, IouS, class_text = roi_helpers.calc_iou(C, R, img_data)
@@ -153,10 +153,10 @@ def parallelize(C, X, img_data, P_rpn):
     bad_images = 0
     
     #for debugging*************************************************************************************************************************************
-    '''
+
     for im in range(X.shape[0]):
         get_data_parallel([C, X[im], img_data[im], [P_rpn[0][im:im+1], P_rpn[1][im:im+1]]])
-   '''
+
 
     with ThreadPoolExecutor(max_workers=C.batch_size) as executor:
         futures = [executor.submit(get_data_parallel, [C, X[im], img_data[im], [P_rpn[0][im:im+1], P_rpn[1][im:im+1]]]) for im in range(X.shape[0])]

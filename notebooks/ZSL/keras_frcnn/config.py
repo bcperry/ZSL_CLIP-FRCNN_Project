@@ -83,7 +83,6 @@ class Config:
         self.model_path = 'model_frcnn.resnet.hdf5'
         
         self.training_classes = list(range(1,21))#[11, 12, 13, 15, 17, 18, 19, 20, 21, 23, 24, 25, 26, 27, 28, 29, 32, 33, 34, 35, 36, 37, 38, 40, 41, 42, 44, 45, 47, 49, 50, 53, 59, 60, 61, 62, 63, 64, 65, 66, 91]
-        weight_list = list(numpy.ones(len(self.training_classes)))
-        weight_list[0] = .1
-        weight_list = weight_list * self.batch_size
-        self.cce_weight = weight_list
+        weight_list = list(numpy.ones(len(self.training_classes) + 1))
+        weight_list[0] = 0
+        self.cce_weight = numpy.array(weight_list)

@@ -25,6 +25,7 @@ class FRCNN(keras.Model):
         (feature_map_width, feature_map_height) = nn.get_feature_map_size(rpn)
         self.feature_map_width = feature_map_width
         self.feature_map_height = feature_map_height
+        self.accuracy = tf.keras.metrics.CategoricalAccuracy()
         #self.loss_tracker = keras.metrics.Mean(name="loss")
     
     def call(self, X, training=False):
@@ -73,7 +74,9 @@ class FRCNN(keras.Model):
         rpn_loss_regr = rpn_loss_regr(frcnn_targets[1], frcnn_pred[1])
         class_loss_cls = class_loss_cls(frcnn_targets[2], frcnn_pred[2])
         class_loss_regr = class_loss_regr(frcnn_targets[3], frcnn_pred[3])
-
+        self.accuracy.update_state(frcnn_targets[2], frcnn_pred[2].numpy())
+  
+        
         return [rpn_loss_cls, rpn_loss_regr, class_loss_cls, class_loss_regr]
     
     def train_step(self, batch):
@@ -104,8 +107,9 @@ class FRCNN(keras.Model):
         self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
         
         total_loss = np.average((loss[0].numpy() + loss[1].numpy() + np.average(loss[2].numpy(), axis=1) + loss[3].numpy()))
-        return {"rpn_loss_cls": loss[0].numpy(), "rpn_loss_regr": loss[1].numpy(), "class_loss_cls": loss[2].numpy(), "class_loss_regr": loss[3].numpy(), "total_loss": total_loss}
+        return {"rpn_loss_cls": loss[0].numpy(), "rpn_loss_regr": loss[1].numpy(), "class_loss_cls": loss[2].numpy(), "class_loss_regr": loss[3].numpy(), "total_loss": total_loss, 'classifier_accuracy': self.accuracy.result().numpy()}
     def test_step(self, batch):
+        self.accuracy.reset_state()
         X = batch_processor(batch, self.C)
         C = self.C
         #initialize new X and img_data 
@@ -125,4 +129,4 @@ class FRCNN(keras.Model):
         frcnn_pred = self(X, training=True)
         loss = self.compute_loss(frcnn_pred, Y)
         total_loss = np.average((loss[0].numpy() + loss[1].numpy() + np.average(loss[2].numpy(), axis=1) + loss[3].numpy()))
-        return {"rpn_loss_cls": loss[0].numpy(), "rpn_loss_regr": loss[1].numpy(), "class_loss_cls": loss[2].numpy(), "class_loss_regr": loss[3].numpy(), "total_loss": total_loss}
+        return {"rpn_loss_cls": loss[0].numpy(), "rpn_loss_regr": loss[1].numpy(), "class_loss_cls": loss[2].numpy(), "class_loss_regr": loss[3].numpy(), "total_loss": total_loss, 'classifier_accuracy': self.accuracy.result().numpy()}
