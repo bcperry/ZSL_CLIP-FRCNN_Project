@@ -66,8 +66,9 @@ class FRCNN(keras.Model):
 
         
         def class_loss_cls(y_true, y_pred):
-            return lambda_cls_class * K.mean(categorical_crossentropy(y_true, y_pred), axis=[1])
-
+            #return lambda_cls_class * K.mean(categorical_crossentropy(y_true, y_pred), axis=[1])
+            return lambda_cls_class * categorical_crossentropy(y_true, y_pred)
+        
         rpn_loss_cls = rpn_loss_cls(frcnn_targets[0], frcnn_pred[0])
         rpn_loss_regr = rpn_loss_regr(frcnn_targets[1], frcnn_pred[1])
         class_loss_cls = class_loss_cls(frcnn_targets[2], frcnn_pred[2])
@@ -92,16 +93,17 @@ class FRCNN(keras.Model):
         P_rpn = self.rpn(X, training = False)
 
         X, Y, pos_samples, discard, _ = train_helpers.second_stage_helper(X, P_rpn, img_data, C)
-        
+
         with tf.GradientTape() as tape:
             # Forward pass
             frcnn_pred = self(X, training=True)
             loss = self.compute_loss(frcnn_pred, Y)
+            
         # Backward pass
         gradients = tape.gradient(loss, self.trainable_variables)
         self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
         
-        total_loss = np.average((loss[0].numpy() + loss[1].numpy() + loss[2].numpy() + loss[3].numpy()) / 4)
+        total_loss = np.average((loss[0].numpy() + loss[1].numpy() + np.average(loss[2].numpy(), axis=1) + loss[3].numpy()))
         return {"rpn_loss_cls": loss[0].numpy(), "rpn_loss_regr": loss[1].numpy(), "class_loss_cls": loss[2].numpy(), "class_loss_regr": loss[3].numpy(), "total_loss": total_loss}
     def test_step(self, batch):
         X = batch_processor(batch, self.C)
@@ -122,5 +124,5 @@ class FRCNN(keras.Model):
         
         frcnn_pred = self(X, training=True)
         loss = self.compute_loss(frcnn_pred, Y)
-        total_loss = np.average((loss[0].numpy() + loss[1].numpy() + loss[2].numpy() + loss[3].numpy()) / 4)
+        total_loss = np.average((loss[0].numpy() + loss[1].numpy() + np.average(loss[2].numpy(), axis=1) + loss[3].numpy()))
         return {"rpn_loss_cls": loss[0].numpy(), "rpn_loss_regr": loss[1].numpy(), "class_loss_cls": loss[2].numpy(), "class_loss_regr": loss[3].numpy(), "total_loss": total_loss}

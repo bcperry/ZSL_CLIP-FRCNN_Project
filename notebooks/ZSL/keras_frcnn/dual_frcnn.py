@@ -145,13 +145,11 @@ class Dual_FRCNN(keras.Model):
         X, Y, pos_samples, discard, text_batch = train_helpers.second_stage_helper(X, P_rpn, img_data, C)
         
 
-        #TODO: TEST
         bert_embeddings = np.zeros(shape=(text_batch.shape[0], text_batch.shape[1], 512), dtype=float)
         for i,im in enumerate(text_batch):
             for j,text in enumerate(im):        
                 bert_embeddings[i][j] = train_helpers.bert_embed(text, C)
         text_batch = bert_embeddings
-        #TODO: TEST
         
         if X is None:
             #revert and train on the previous batch
@@ -168,7 +166,7 @@ class Dual_FRCNN(keras.Model):
         self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
         # Monitor loss
         #self.loss_tracker.update_state(loss)
-        total_loss = np.average((loss[0].numpy() + loss[1].numpy() + np.average(loss[2].numpy()) + loss[3].numpy()) / 4)
+        total_loss = np.average((loss[0].numpy() + loss[1].numpy() + np.average(loss[2].numpy()) + loss[3].numpy()))
         self.prev_batch = [X, text_batch, Y]
         return {"rpn_loss_cls": loss[0].numpy(), "rpn_loss_regr": loss[1].numpy(), "embedding_loss": loss[2].numpy(), "class_loss_regr": loss[3].numpy(), "total_loss": total_loss}
 
@@ -189,7 +187,13 @@ class Dual_FRCNN(keras.Model):
 
         X, Y, pos_samples, discard, text_batch = train_helpers.second_stage_helper(X, P_rpn, img_data, C)
         
+        bert_embeddings = np.zeros(shape=(text_batch.shape[0], text_batch.shape[1], 512), dtype=float)
+        for i,im in enumerate(text_batch):
+            for j,text in enumerate(im):        
+                bert_embeddings[i][j] = train_helpers.bert_embed(text, C)
+        text_batch = bert_embeddings
+        
         frcnn_pred, text_embedding = self([X, text_batch], training=True)
         loss = self.compute_loss(frcnn_pred, text_embedding, Y)
-        total_loss = np.average((loss[0].numpy() + loss[1].numpy() + np.average(loss[2].numpy()) + loss[3].numpy()) / 4)
+        total_loss = np.average((loss[0].numpy() + loss[1].numpy() + np.average(loss[2].numpy()) + loss[3].numpy()))
         return {"rpn_loss_cls": loss[0].numpy(), "rpn_loss_regr": loss[1].numpy(), "embedding_loss": loss[2].numpy(), "class_loss_regr": loss[3].numpy(), "total_loss": total_loss}

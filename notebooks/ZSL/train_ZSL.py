@@ -3,6 +3,7 @@ import re
 import argparse
 import os
 import glob
+import datetime
 
 import tensorflow as tf
 from tensorflow.keras.optimizers import Adam
@@ -21,6 +22,12 @@ from keras_frcnn import CLIP
 
 
 from keras_frcnn.tfrecord_parser import get_data
+
+
+import logging
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # FATAL
+logging.getLogger('tensorflow').setLevel(logging.FATAL)
 
 
 gpus = tf.config.list_physical_devices('GPU')
@@ -105,9 +112,14 @@ print(f'Num train samples {total_train_records}')
 print(f'Num val samples {total_val_records}')
 
 #since we are using square images, we know the image size we will be scaling to
-input_shape_img = (C.im_size, C.im_size, 3)
+input_shape_img = (None, None, 3)
 roi_input = Input(shape=(C.num_rois, 4))
 
+optimizer = Adam()
+#optimizer = Adam(clipnorm=1.0)
+
+#set a very small learning rate for the final pass
+full_optimizer = Adam(learning_rate=1e-5, clipnorm=1.0)
 
 print('Building models.')
 # Create a MirroredStrategy.
@@ -138,15 +150,22 @@ with strategy.scope():
         model_all = Model([shared_layers.input, roi_input], rpn[:2] + classifier_ZSL)
         #build the text encoder
         text_base_embedding, text_encoder = CLIP.create_text_encoder(C)
-        #TODO: TEST
-        
         C.bert_embeddings = text_base_embedding.predict(tf.convert_to_tensor(C.class_text))
-        #TODO: TEST
+
 
     else:
         classifier = nn.classifier(shared_layers.output, roi_input, C.num_rois, nb_classes=num_ids, trainable=True)
         # this is a model that holds both the RPN and the classifier, used to train the model end to end
         model_all = Model([shared_layers.input, roi_input], rpn[:2] + classifier)
+
+if model_type == 'ZSL':
+    with strategy.scope():
+        model = Dual_FRCNN(model_rpn, model_all, text_encoder, C)
+        model.compile(optimizer= optimizer, run_eagerly = True)
+else:
+    with strategy.scope():
+        model = FRCNN(model_rpn, model_all, C)
+        model.compile(optimizer= optimizer, metrics={'dense_class_{}'.format(num_ids): 'accuracy'},  run_eagerly=True)
 
 print('Models sucessfully built.')
 start_epoch = 0
@@ -164,7 +183,7 @@ if os.path.isdir('./outputs/model/') and C.input_weight_path is None:
         else:
             epoch = int(re.search('epoch(.+?)-', file).group(1))
             
-            if epoch > start_epoch:
+            if epoch >= start_epoch:
                 epoch_weights = file
                 start_epoch = epoch
     if fine_tune is not None:
@@ -178,21 +197,21 @@ try:
     if (C.input_weight_path == None):
         print('Loaded imagenet weights to the vision backbone.')
     else:
-        print(f'loading FRCNN weights from {C.input_weight_path}')
-        model_all.load_weights(C.input_weight_path, by_name=True)
-    if model_type == 'ZSL':
-        if (C.input_weight_path == None):
-            print('Loaded pretrained BERT weights to the text encoder.')
+        model.built = True
+        if model_type == 'FRCNN':
+            model.load_weights(C.input_weight_path, by_name=True)
+            print(f'loading FRCNN weights from {C.input_weight_path}')
         else:
-            print(f'loading text_encoder weights from {C.input_weight_path}')
-            text_base_embedding.load_weights(C.input_weight_path, by_name=True)
-            text_encoder.load_weights(C.input_weight_path, by_name=True)
+            if (C.input_weight_path == None):
+                print('Loaded imagenet weights to the vision backbone.')
+                print('Loaded pretrained BERT weights to the text encoder.')
+            else:
+                model.load_weights(C.input_weight_path, by_name=True)
+                print(f'loading dual encoder weights from {C.input_weight_path}')
 except:
     print('Could not load pretrained model weights.')
 
-optimizer = Adam(clipnorm=1.0)
-#set a very small learning rate for the final pass
-full_optimizer = Adam(learning_rate=1e-5, clipnorm=1.0)
+
 print('Starting training')
 
 #Azure note:
@@ -213,6 +232,10 @@ reduce_lr = callbacks.ReduceLROnPlateau(monitor="total_loss", factor=0.2, patien
 # Create an early stopping callback.
 early_stopping = callbacks.EarlyStopping(monitor="total_loss", patience=5, restore_best_weights=True)
 
+log_dir = "./outputs/logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
+
+
 #this will reduce the time between evaluation by shortening the epoch lenth to less than the full training dataset size
 steps_per_epoch = int(total_train_records / C.batch_size)
 validation_steps = int(total_val_records / C.batch_size)
@@ -221,50 +244,30 @@ validation_steps = int(total_val_records / C.batch_size)
 while steps_per_epoch >= 2000:
     steps_per_epoch = int(steps_per_epoch / 2)
 #this will reduce the amount of validataion data used to generate validation losses
-while validation_steps >= 500:
+while validation_steps >= 50:
     validation_steps = int(validation_steps / 2)
     
+#TODO: delete this has no early stopping
+model.fit(x=train_dataset, epochs=C.num_epochs, steps_per_epoch = steps_per_epoch, validation_steps = validation_steps, initial_epoch = start_epoch, verbose='auto', validation_data=val_dataset, callbacks=[reduce_lr, tensorboard_callback, checkpoint, LogRunMetrics()])
+  
+#model.fit(x=train_dataset, epochs=C.num_epochs, steps_per_epoch = steps_per_epoch, validation_steps = validation_steps, initial_epoch = start_epoch, verbose='auto', validation_data=val_dataset, callbacks=[reduce_lr, tensorboard_callback, checkpoint, early_stopping, LogRunMetrics()])
+    
+
+print('Primary training complete, starting fine tuning for 1 epoch.')
+#set all layers of the FRCNN model to trainable, however we dont set the BERT model layers trainable
+model_all.trainable = True
+
 
 if model_type == 'ZSL':
-    with strategy.scope():
-        Dual_FRCNN = Dual_FRCNN(model_rpn, model_all, text_encoder, C)
-        Dual_FRCNN.compile(optimizer= optimizer, run_eagerly = True)
-    Dual_FRCNN.fit(x=train_dataset, epochs=C.num_epochs, steps_per_epoch = steps_per_epoch, validation_steps = validation_steps, initial_epoch = start_epoch, verbose='auto', validation_data=val_dataset, callbacks=[reduce_lr, checkpoint, early_stopping, LogRunMetrics()])
-        
-    
-    print('Primary training complete, starting fine tuning for 1 epoch.')
-    #set all layers of the FRCNN model to trainable, however we dont set the BERT model layers trainable
-    model_all.trainable = True
-
-    
-
-    checkpoint_path = './outputs/model/ZSL_FRCNN_fine_tune_epoch-total_loss-{total_loss:.2f}.hdf5'        
-    
-    #set up callbacks
-    checkpoint = callbacks.ModelCheckpoint(filepath=checkpoint_path, save_weights_only=True, verbose=1)
-    
-    
-    #recompile the model
-    with strategy.scope():
-        Dual_FRCNN.compile(optimizer= full_optimizer, run_eagerly=True)
-    Dual_FRCNN.fit(x=train_dataset, epochs=1, verbose='auto', steps_per_epoch=steps_per_epoch, validation_steps=validation_steps, validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint, LogRunMetrics()])
+    checkpoint_path = './outputs/model/ZSL_FRCNN_fine_tune_epoch--total_loss-{total_loss:.2f}.hdf5'
 else:
-    with strategy.scope():
-        FRCNN = FRCNN(model_rpn, model_all, C)
-        FRCNN.compile(optimizer= optimizer, run_eagerly=True)
-    FRCNN.fit(x=train_dataset, epochs=C.num_epochs, steps_per_epoch = steps_per_epoch, validation_steps = validation_steps, initial_epoch = start_epoch, verbose='auto', validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint, LogRunMetrics()])
-    
-    
-    print('Primary training complete, starting fine tuning for 1 epoch.')
-    #set all layers of the model to trainable
-    FRCNN.trainable = True
+    checkpoint_path = './outputs/model/FRCNN_fine_tune_epoch--total_loss-{total_loss:.2f}.hdf5'
 
-    
-    #set up callbacks
-    checkpoint_path = './outputs/model/FRCNN_fine_tune_epoch-total_loss-{total_loss:.2f}.hdf5'
-    checkpoint = callbacks.ModelCheckpoint(filepath=checkpoint_path, save_weights_only=True, verbose=1)
-    
-    with strategy.scope():
-        #recompile the model
-        FRCNN.compile(optimizer= full_optimizer, run_eagerly=True)
-    FRCNN.fit(x=train_dataset, epochs=1, verbose='auto', steps_per_epoch=steps_per_epoch, validation_steps=validation_steps, validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint, LogRunMetrics()])
+#set up callbacks
+checkpoint = callbacks.ModelCheckpoint(filepath=checkpoint_path, save_weights_only=True, verbose=1)
+
+
+#recompile the model
+with strategy.scope():
+    model.compile(optimizer= full_optimizer, run_eagerly=True)
+model.fit(x=train_dataset, epochs=1, verbose='auto', steps_per_epoch=steps_per_epoch, validation_steps=validation_steps, validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint, LogRunMetrics()])

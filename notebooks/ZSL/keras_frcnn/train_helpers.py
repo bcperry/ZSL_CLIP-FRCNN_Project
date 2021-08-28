@@ -70,7 +70,7 @@ def get_data_parallel(inputs):
     img_data = inputs[2]
     P_rpn = inputs[3]
     
-    _, rpn_targets, _ = data_generators.calc_targets(C, X, img_data, P_rpn[0].shape[1], P_rpn[0].shape[2])
+    X, rpn_targets, _ = data_generators.calc_targets(C, X, img_data, P_rpn[0].shape[1], P_rpn[0].shape[2])
     
     
     #R input and output are in feature space
@@ -82,8 +82,8 @@ def get_data_parallel(inputs):
     if X2 is None:
         return None
     
-    neg_samples = np.where(Y1[0, :, -1] == 1)
-    pos_samples = np.where(Y1[0, :, -1] == 0)
+    neg_samples = np.where(Y1[0, :, 0] == 1)
+    pos_samples = np.where(Y1[0, :, 0] == 0)
     
     neg_samples = list(neg_samples[0])
     pos_samples = list(pos_samples[0])
@@ -96,7 +96,7 @@ def get_data_parallel(inputs):
         if len(pos_samples) < C.num_rois//2:
             selected_pos_samples = pos_samples
         else:
-            selected_pos_samples = np.random.choice(pos_samples, C.num_rois//2, replace=False)
+            selected_pos_samples = np.random.choice(pos_samples, C.num_rois//2, replace=False).tolist()
         #if there are no negative samples, use only positive samples
         if len(neg_samples) == 0:
             selected_pos_samples = np.random.choice(pos_samples, C.num_rois, replace=True).tolist()
@@ -151,11 +151,12 @@ def parallelize(C, X, img_data, P_rpn):
     
     batch_pos_samples = 0
     bad_images = 0
-    #for debugging
+    
+    #for debugging*************************************************************************************************************************************
     '''
     for im in range(X.shape[0]):
         get_data_parallel([C, X[im], img_data[im], [P_rpn[0][im:im+1], P_rpn[1][im:im+1]]])
-    '''
+   '''
 
     with ThreadPoolExecutor(max_workers=C.batch_size) as executor:
         futures = [executor.submit(get_data_parallel, [C, X[im], img_data[im], [P_rpn[0][im:im+1], P_rpn[1][im:im+1]]]) for im in range(X.shape[0])]
@@ -166,7 +167,7 @@ def parallelize(C, X, img_data, P_rpn):
             bad_images += 1
             continue
         
-        X = future.result()[0][0]
+        X = future.result()[0][0][0]
         X2 = future.result()[0][1]
         Y1_rpn = future.result()[1][0]
         Y2_rpn = future.result()[1][1]

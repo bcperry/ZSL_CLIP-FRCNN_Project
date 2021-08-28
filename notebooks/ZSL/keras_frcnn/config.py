@@ -1,3 +1,4 @@
+import numpy
 class Config:
 
     def __init__(self):
@@ -14,16 +15,16 @@ class Config:
         self.num_epochs = 25
         
         # number of ROIs at once
-        self.num_rois = 50
+        self.num_rois = 4
         
         self.output_weight_path = r'C:\Data_drive\workspace\FRCNN\model.hdf5'
         
         #path to the input weights. If trainining for the first time use None to load imagenet weights and/ or standard BERT weights
-        self.input_weight_path = r"C:\Data_drive\Github\GEOINT_Zero-shot_Object_identification\notebooks\ZSL\outputs\FRCNN model\FRCNN_epoch23-total_loss-0.40.hdf5"
+        self.input_weight_path = None#r"C:\Data_drive\Github\GEOINT_Zero-shot_Object_identification\notebooks\ZSL\outputs\FRCNN model\FRCNN_epoch23-total_loss-0.40.hdf5"
         
         self.text_dict_pickle = None#r"xview_attribute_dict_text.pickle"
         
-        self.batch_size = 10
+        self.batch_size = 40
         
         #CLIP projection settings
         
@@ -82,4 +83,7 @@ class Config:
         self.model_path = 'model_frcnn.resnet.hdf5'
         
         self.training_classes = list(range(1,21))#[11, 12, 13, 15, 17, 18, 19, 20, 21, 23, 24, 25, 26, 27, 28, 29, 32, 33, 34, 35, 36, 37, 38, 40, 41, 42, 44, 45, 47, 49, 50, 53, 59, 60, 61, 62, 63, 64, 65, 66, 91]
-
+        weight_list = list(numpy.ones(len(self.training_classes)))
+        weight_list[0] = .1
+        weight_list = weight_list * self.batch_size
+        self.cce_weight = weight_list
