@@ -198,14 +198,14 @@ try:
     else:
         model.built = True
         if model_type == 'FRCNN':
-            model.load_weights(C.input_weight_path, by_name=True)
+            model.load_weights(C.input_weight_path, by_name=False)
             print(f'loading FRCNN weights from {C.input_weight_path}')
         else:
             if (C.input_weight_path == None):
                 print('Loaded imagenet weights to the vision backbone.')
                 print('Loaded pretrained BERT weights to the text encoder.')
             else:
-                model.load_weights(C.input_weight_path, by_name=True)
+                model.load_weights(C.input_weight_path, by_name=False)
                 print(f'loading dual encoder weights from {C.input_weight_path}')
 except:
     print('Could not load pretrained model weights.')
