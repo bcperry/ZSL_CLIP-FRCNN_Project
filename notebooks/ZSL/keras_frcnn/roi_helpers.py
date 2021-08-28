@@ -3,8 +3,6 @@ import copy
 import math
 
 from . import data_generators
-from . import config
-from . import train_helpers
 
 
 def calc_iou(C, R, img_data):
@@ -20,10 +18,10 @@ def calc_iou(C, R, img_data):
 
     for bbox_num, bbox in enumerate(bboxes):
         # get the GT box coordinates, and resize to account for image resizing
-        gta[bbox_num, 0] = int(round(bbox['x1'] * (resized_width / float(width))/C.rpn_stride))
-        gta[bbox_num, 1] = int(round(bbox['x2'] * (resized_width / float(width))/C.rpn_stride))
-        gta[bbox_num, 2] = int(round(bbox['y1'] * (resized_height / float(height))/C.rpn_stride))
-        gta[bbox_num, 3] = int(round(bbox['y2'] * (resized_height / float(height))/C.rpn_stride))
+        gta[bbox_num, 0] = bbox['x1'] * (resized_width / float(width))/C.rpn_stride
+        gta[bbox_num, 1] = bbox['x2'] * (resized_width / float(width))/C.rpn_stride
+        gta[bbox_num, 2] = bbox['y1'] * (resized_height / float(height))/C.rpn_stride
+        gta[bbox_num, 3] = bbox['y2'] * (resized_height / float(height))/C.rpn_stride
 
     x_roi = []
     y_class_num = []
@@ -35,15 +33,12 @@ def calc_iou(C, R, img_data):
     for ix in range(R.shape[0]):
 
         (x1, y1, x2, y2) = R[ix, :]
-        x1 = int(round(x1))
-        y1 = int(round(y1))
-        x2 = int(round(x2))
-        y2 = int(round(y2))
-        
 
         best_iou = 0.0
         best_bbox = -1
         for bbox_num in range(len(bboxes)):
+            if class_mapping[bboxes[bbox_num]['class']] not in C.training_classes:
+                continue
             curr_iou = data_generators.iou([gta[bbox_num, 0], gta[bbox_num, 2], gta[bbox_num, 1], gta[bbox_num, 3]], [x1, y1, x2, y2])
             if curr_iou > best_iou:
                 best_iou = curr_iou
@@ -77,9 +72,14 @@ def calc_iou(C, R, img_data):
                 print('roi = {}'.format(best_iou))
                 raise RuntimeError
         
-        num_classes = class_mapping[max(class_mapping, key=class_mapping.get)] + 1
-        class_num = class_mapping[cls_name]
-        class_text.append(C.class_text[class_num])
+        num_classes = len(C.training_classes) + 1
+        #find the mapping between the class name and the xview id, then the xview id and the total number of ids
+        if cls_name == 'bg':
+            class_num = 0
+        else:
+            class_num = C.training_classes.index(class_mapping[cls_name])
+
+        class_text.append(C.class_text[class_mapping[cls_name]])
         class_label = (num_classes) * [0] #add 1 here to account for the 0 class
         class_label[class_num] = 1
         y_class_num.append(copy.deepcopy(class_label))

@@ -6,3 +6,9 @@ dependencies:
 - pip:
   - azureml-defaults
   - tensorflow-gpu==2.5
+  - matplotlib
+  - pandas
+  - tqdm
+  - tensorflow_hub
+  - tensorflow_text
+  - tensorflow_addons

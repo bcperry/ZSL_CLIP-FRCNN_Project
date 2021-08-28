@@ -14,9 +14,14 @@ import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import as_completed
 
+def bert_embed(text, C):
+    index =  C.class_text.index(text)
+    embed = C.bert_embeddings[index]
+    return embed
+
 def get_class_map(C):
     
-    label_file = glob.glob(C.train_path + '/*labels.txt')
+    label_file = glob.glob(C.data_path + C.class_text)
     class_mapping = {}
     file = open(label_file[0], "r")
     
@@ -36,7 +41,7 @@ def get_class_map(C):
     return class_mapping
 
 def get_class_text(C):
-    pickle_file = glob.glob(C.train_path + '/*.pickle')
+    pickle_file = glob.glob(C.data_path + C.text_dict_pickle)
     class_text = pd.read_pickle(pickle_file[0])
     class_text_mapping = {}
     
@@ -45,6 +50,10 @@ def get_class_text(C):
         #We need to accound for the background class
         if text_key == 0:
             class_text_mapping[text_key] = 'A background with features: None'
+            continue
+        #these keys exist in the data but are not in the descriptions
+        if text_key == 75 or text_key == 82 :
+            class_text_mapping[text_key] = 'A unknown with features: '
             continue
         text_list = class_text[text_key]
         desc = "A " + key + " with features: "
@@ -61,11 +70,11 @@ def get_data_parallel(inputs):
     img_data = inputs[2]
     P_rpn = inputs[3]
     
-    _, rpn_targets, _ = data_generators.calc_targets(C, X, img_data, P_rpn[0].shape[1], P_rpn[0].shape[2])
+    X, rpn_targets, _ = data_generators.calc_targets(C, X, img_data, P_rpn[0].shape[1], P_rpn[0].shape[2])
     
     
     #R input and output are in feature space
-    R = roi_helpers.rpn_to_roi(C, P_rpn[0], P_rpn[1], use_regr=True, overlap_thresh=0.1, max_boxes=900)
+    R = roi_helpers.rpn_to_roi(C, P_rpn[0], P_rpn[1], use_regr=True, overlap_thresh=0.3, max_boxes=900)
 
     # note: calc_iou converts from (x1,y1,x2,y2) to (x,y,w,h) format
     X2, Y1, Y2, IouS, class_text = roi_helpers.calc_iou(C, R, img_data)
@@ -73,8 +82,8 @@ def get_data_parallel(inputs):
     if X2 is None:
         return None
     
-    neg_samples = np.where(Y1[0, :, -1] == 1)
-    pos_samples = np.where(Y1[0, :, -1] == 0)
+    neg_samples = np.where(Y1[0, :, 0] == 1)
+    pos_samples = np.where(Y1[0, :, 0] == 0)
     
     neg_samples = list(neg_samples[0])
     pos_samples = list(pos_samples[0])
@@ -87,7 +96,7 @@ def get_data_parallel(inputs):
         if len(pos_samples) < C.num_rois//2:
             selected_pos_samples = pos_samples
         else:
-            selected_pos_samples = np.random.choice(pos_samples, C.num_rois//2, replace=False)
+            selected_pos_samples = np.random.choice(pos_samples, C.num_rois//2, replace=False).tolist()
         #if there are no negative samples, use only positive samples
         if len(neg_samples) == 0:
             selected_pos_samples = np.random.choice(pos_samples, C.num_rois, replace=True).tolist()
@@ -143,6 +152,12 @@ def parallelize(C, X, img_data, P_rpn):
     batch_pos_samples = 0
     bad_images = 0
     
+    #for debugging*************************************************************************************************************************************
+    '''
+    for im in range(X.shape[0]):
+        get_data_parallel([C, X[im], img_data[im], [P_rpn[0][im:im+1], P_rpn[1][im:im+1]]])
+   '''
+
     with ThreadPoolExecutor(max_workers=C.batch_size) as executor:
         futures = [executor.submit(get_data_parallel, [C, X[im], img_data[im], [P_rpn[0][im:im+1], P_rpn[1][im:im+1]]]) for im in range(X.shape[0])]
     for future in as_completed(futures):
@@ -152,7 +167,7 @@ def parallelize(C, X, img_data, P_rpn):
             bad_images += 1
             continue
         
-        X = future.result()[0][0]
+        X = future.result()[0][0][0]
         X2 = future.result()[0][1]
         Y1_rpn = future.result()[1][0]
         Y2_rpn = future.result()[1][1]
@@ -169,6 +184,10 @@ def parallelize(C, X, img_data, P_rpn):
         Y2_batch.append(Y2)
         text_batch.append(text)
         batch_pos_samples = batch_pos_samples + len(pos_samples)
+        
+    if bad_images == X.shape[0]:
+        print('no valid images were found')
+        return(None, None, None, None)
     
     #if we ignored any images, replace them with the last good image.  otherwise, the model will not update properly
     for i in range(bad_images):
@@ -194,6 +213,9 @@ def parallelize(C, X, img_data, P_rpn):
 def second_stage_helper(X, P_rpn, img_data, C):
     
     X, Y, pos_samples, text_batch = parallelize(C, X, img_data, P_rpn)
+    
+    if X is None:
+        return(None, None, None, None, None)
     
     if X[0].shape[0] != C.batch_size:
         discard = C.batch_size - X[0].shape[0]

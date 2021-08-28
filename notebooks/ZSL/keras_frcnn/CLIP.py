@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 from tqdm import tqdm
 from keras.callbacks import Callback
-
+from tensorflow.keras.layers import Input
 
 
 """
@@ -59,7 +59,7 @@ def create_vision_encoder(
         embeddings, num_projection_layers, projection_dims, dropout_rate
     )
     # Create the vision encoder model.
-    return keras.Model(inputs, outputs, name="vision_encoder")
+    return keras.Model(inputs, embeddings, name="vision_encoder")
 
 
 """
@@ -88,9 +88,11 @@ def create_text_encoder(C, trainable=False):
     bert_inputs = preprocess(inputs)
     # Generate embeddings for the preprocessed text using the BERT model.
     embeddings = bert(bert_inputs)["pooled_output"]
+    
+    proj_inputs = Input(shape=embeddings.shape[1], name='bert_projections')
     # Project the embeddings produced by the model.
     outputs = project_embeddings(
-        embeddings, C.num_projection_layers, C.projection_dims, C.dropout_rate
+        proj_inputs, C.num_projection_layers, C.projection_dims, C.dropout_rate
     )
     # Create the text encoder model.
-    return keras.Model(inputs, outputs, name="text_encoder")
+    return keras.Model(inputs, embeddings, name="bert_encoder"), keras.Model(proj_inputs, outputs, name="text_encoder")
