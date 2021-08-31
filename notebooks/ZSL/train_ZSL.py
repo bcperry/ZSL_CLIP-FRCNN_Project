@@ -28,6 +28,9 @@ import logging
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # FATAL
 logging.getLogger('tensorflow').setLevel(logging.FATAL)
 
+#TODO:delete
+#run on 1070 only
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 gpus = tf.config.list_physical_devices('GPU')
 if gpus:

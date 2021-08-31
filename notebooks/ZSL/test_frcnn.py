@@ -19,13 +19,14 @@ from keras_frcnn import resnet as nn
 from keras_frcnn import train_helpers
 from keras_frcnn import CLIP
 
-
+from keras_frcnn import data_generators
 from keras_frcnn.dual_frcnn import Dual_FRCNN
 from keras_frcnn.frcnn import FRCNN
 import keras_frcnn.roi_helpers as roi_helpers
-
+from keras_frcnn.tfrecord_parser import get_data
 
 import logging
+
 
 def format_img_size(img, C):
 	""" formats the image size based on config """
@@ -153,29 +154,7 @@ else:
     model_all = Model([shared_layers.input, roi_input], rpn[:2] + classifier)
 
 print('Models sucessfully built.')
-start_epoch = 0
 #check if model has already started training by checking for a model in the outputs folder
-if os.path.isdir('./outputs/model/') and C.input_weight_path is None:
-
-    fine_tune = None
-    epoch_weights = None
-    files = glob.glob('./outputs/model/*')
-    
-    for file in files:
-        fine_tune = re.search('fine_tune_epoch', file)
-        if fine_tune is not None:
-            fine_tune_weights = file
-        else:
-            epoch = int(re.search('epoch(.+?)-', file).group(1))
-            
-            if epoch > start_epoch:
-                epoch_weights = file
-                start_epoch = epoch
-    if fine_tune is not None:
-        start_epoch = 0
-        C.input_weight_path = fine_tune_weights
-    else:
-        C.input_weight_path = epoch_weights
         
 if model_type == 'ZSL':
 
@@ -292,6 +271,7 @@ for idx, img_name in enumerate(sorted(os.listdir(img_path))):
         bbox = np.array(bboxes[key])
 
         new_boxes, new_probs = roi_helpers.non_max_suppression_fast(bbox, np.array(probs[key]), overlap_thresh=0.5)
+
         for jk in range(new_boxes.shape[0]):
             (x1, y1, x2, y2) = new_boxes[jk,:]
 
@@ -308,13 +288,13 @@ for idx, img_name in enumerate(sorted(os.listdir(img_path))):
             cv2.rectangle(img, (textOrg[0] - 5, textOrg[1]+baseLine - 5), (textOrg[0]+retval[0] + 5, textOrg[1]-retval[1] - 5), (0, 0, 0), 2)
             cv2.rectangle(img, (textOrg[0] - 5,textOrg[1]+baseLine - 5), (textOrg[0]+retval[0] + 5, textOrg[1]-retval[1] - 5), (255, 255, 255), -1)
             cv2.putText(img, textLabel, textOrg, cv2.FONT_HERSHEY_DUPLEX, 1, (0, 0, 0), 1)
+            
+        print(f'Elapsed time = {(time.time() - st)}')
+        print(all_dets)
+        cv2.imshow('image window', img)
+        # add wait key. window waits until user presses a key
+        cv2.waitKey(0)
+        # and finally destroy/close all open windows
+        cv2.destroyAllWindows()
         
-    print(f'Elapsed time = {(time.time() - st)}')
-    print(all_dets)
-    cv2.imshow('image window', img)
-    # add wait key. window waits until user presses a key
-    cv2.waitKey(0)
-    # and finally destroy/close all open windows
-    cv2.destroyAllWindows()
     
-
