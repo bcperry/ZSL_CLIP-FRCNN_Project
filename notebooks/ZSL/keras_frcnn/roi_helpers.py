@@ -77,7 +77,8 @@ def calc_iou(C, R, img_data):
         if cls_name == 'bg':
             class_num = 0
         else:
-            class_num = C.training_classes.index(class_mapping[cls_name])
+            #this was the most annoying bug in the history of time
+            class_num = class_mapping[cls_name] #C.training_classes.index(class_mapping[cls_name])
 
         class_text.append(C.class_text[class_mapping[cls_name]])
         class_label = (num_classes) * [0] #add 1 here to account for the 0 class
@@ -86,7 +87,7 @@ def calc_iou(C, R, img_data):
         coords = [0] * 4 * (num_classes - 1)
         labels = [0] * 4 * (num_classes - 1)
         if cls_name != 'bg':
-            label_pos = 4 * class_num
+            label_pos = 4 * (class_num-1)
             sx, sy, sw, sh = C.classifier_regr_std
             coords[label_pos:4+label_pos] = [sx*tx, sy*ty, sw*tw, sh*th]
             labels[label_pos:4+label_pos] = [1, 1, 1, 1]
@@ -98,10 +99,9 @@ def calc_iou(C, R, img_data):
 
     if len(x_roi) == 0:
         return None, None, None, None, None
-
+    class_text_array = np.array(class_text)
     X = np.array(x_roi)
     Y1 = np.array(y_class_num)
-    class_text_array = np.array(class_text)
     Y2 = np.concatenate([np.array(y_class_regr_label),np.array(y_class_regr_coords)],axis=1)
 
     return np.expand_dims(X, axis=0), np.expand_dims(Y1, axis=0), np.expand_dims(Y2, axis=0), IoUs, np.expand_dims(class_text_array, axis=0)
@@ -231,7 +231,7 @@ def non_max_suppression_fast(boxes, probs, overlap_thresh=0.9, max_boxes=300):
 	return boxes, probs
 
 
-def rpn_to_roi(C, rpn_layer, regr_layer, use_regr=True, max_boxes=300,overlap_thresh=0.9):
+def rpn_to_roi(C, rpn_layer, regr_layer, use_regr=True, max_boxes=300, overlap_thresh=0.9):
     
     
     import tensorflow.python.ops.numpy_ops.np_config as np_config

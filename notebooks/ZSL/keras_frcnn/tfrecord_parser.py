@@ -79,6 +79,18 @@ def get_data(path, C):
 
     #import pdb
     #tf.data.experimental.enable_debug_mode()
+    
+    def get_new_img_size(width, height, img_min_side=600):
+    	if width <= height:
+    		f = float(img_min_side) / width
+    		resized_height = int(f * height)
+    		resized_width = img_min_side
+    	else:
+    		f = float(img_min_side) / height
+    		resized_width = int(f * width)
+    		resized_height = img_min_side
+    
+    	return resized_width, resized_height
 
     
     with open(record_file[0],'r') as f:
@@ -104,6 +116,9 @@ def get_data(path, C):
             #pdb.Pdb(nosigint=True).set_trace()
             features = tf.io.parse_single_example(example, feature_description)
             raw_image = tf.image.decode_jpeg(features['image/encoded'], channels=3)
+            '''width = raw_image.shape[0]
+            height = raw_image.shape[1]
+            resized_width, resized_height = get_new_img_size(width, height)'''
             features["image"] = tf.cast(tf.image.resize(raw_image, size=(C.im_size, C.im_size)), tf.uint8)
             
             features.pop("image/encoded")

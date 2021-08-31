@@ -93,10 +93,10 @@ def get_data_parallel(inputs):
         selected_pos_samples = []
         selected_neg_samples= []
         
-        if len(pos_samples) < C.num_rois//2:
+        if len(pos_samples) < int(C.num_rois//2):
             selected_pos_samples = pos_samples
         else:
-            selected_pos_samples = np.random.choice(pos_samples, C.num_rois//2, replace=False).tolist()
+            selected_pos_samples = np.random.choice(pos_samples, int(C.num_rois//2), replace=False).tolist()
         #if there are no negative samples, use only positive samples
         if len(neg_samples) == 0:
             selected_pos_samples = np.random.choice(pos_samples, C.num_rois, replace=True).tolist()
@@ -120,6 +120,9 @@ def get_data_parallel(inputs):
     #cast Y1 and Y2 to float32 in case there are no positive samples in the selection
     Y1 = Y1.astype('float32')
     Y2 = Y2.astype('float32')
+    
+    #shuffle the list so that the positives are not always the first two
+    random.shuffle(sel_samples)
     
     X2 = X2[:, sel_samples, :]
     Y1 = Y1[:, sel_samples, :]
@@ -186,7 +189,7 @@ def parallelize(C, X, img_data, P_rpn):
         batch_pos_samples = batch_pos_samples + len(pos_samples)
         
     if bad_images == X.shape[0]:
-        print('no valid images were found')
+        #print('no valid images were found')
         return(None, None, None, None)
     
     #if we ignored any images, replace them with the last good image.  otherwise, the model will not update properly

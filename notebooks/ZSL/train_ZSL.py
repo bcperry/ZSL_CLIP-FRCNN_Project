@@ -18,7 +18,7 @@ from keras_frcnn import train_helpers
 from keras_frcnn.dual_frcnn import Dual_FRCNN
 from keras_frcnn.frcnn import FRCNN
 from keras_frcnn import CLIP
-
+from keras_frcnn import losses as losses
 
 from keras_frcnn.tfrecord_parser import get_data
 
@@ -114,11 +114,11 @@ print(f'Num val samples {total_val_records}')
 input_shape_img = (None, None, 3)
 roi_input = Input(shape=(C.num_rois, 4))
 
-optimizer = Adam()
+optimizer = Adam(learning_rate=1e-5)
 #optimizer = Adam(clipnorm=1.0)
 
 #set a very small learning rate for the final pass
-full_optimizer = Adam(learning_rate=1e-5, clipnorm=1.0)
+full_optimizer = Adam(learning_rate=1e-7, clipnorm=1.0)
 
 print('Building models.')
 # Create a MirroredStrategy.
@@ -160,11 +160,13 @@ with strategy.scope():
 if model_type == 'ZSL':
     with strategy.scope():
         model = Dual_FRCNN(model_rpn, model_all, text_encoder, C)
+        loss_fns = [losses.rpn_loss_cls(num_anchors), losses.rpn_loss_regr(num_anchors), losses.class_loss_cls, losses.class_loss_regr(len(num_ids)-1)]
         model.compile(optimizer= optimizer, run_eagerly = True)
 else:
     with strategy.scope():
+        loss_fns = [losses.rpn_loss_cls(num_anchors), losses.rpn_loss_regr(num_anchors), losses.class_loss_cls, losses.class_loss_regr(num_ids-1)]
         model = FRCNN(model_rpn, model_all, C)
-        model.compile(optimizer= optimizer, metrics={'dense_class_{}'.format(num_ids): 'accuracy'},  run_eagerly=True)
+        model.compile(optimizer= optimizer, run_eagerly=True)
 
 print('Models sucessfully built.')
 start_epoch = 0
@@ -198,14 +200,14 @@ try:
     else:
         model.built = True
         if model_type == 'FRCNN':
-            model.load_weights(C.input_weight_path, by_name=False)
+            model.load_weights(C.input_weight_path, by_name=True)
             print(f'loading FRCNN weights from {C.input_weight_path}')
         else:
             if (C.input_weight_path == None):
                 print('Loaded imagenet weights to the vision backbone.')
                 print('Loaded pretrained BERT weights to the text encoder.')
             else:
-                model.load_weights(C.input_weight_path, by_name=False)
+                model.load_weights(C.input_weight_path, by_name=True)
                 print(f'loading dual encoder weights from {C.input_weight_path}')
 except:
     print('Could not load pretrained model weights.')
@@ -229,7 +231,7 @@ checkpoint = callbacks.ModelCheckpoint(filepath=checkpoint_path, save_weights_on
 reduce_lr = callbacks.ReduceLROnPlateau(monitor="total_loss", factor=0.2, patience=3)
 
 # Create an early stopping callback.
-early_stopping = callbacks.EarlyStopping(monitor="total_loss", patience=5, restore_best_weights=True)
+early_stopping = callbacks.EarlyStopping(monitor="total_loss", patience=15, restore_best_weights=True)
 
 #this will reduce the time between evaluation by shortening the epoch lenth to less than the full training dataset size
 steps_per_epoch = int(total_train_records / C.batch_size)
@@ -242,8 +244,8 @@ while steps_per_epoch >= 2000:
 while validation_steps >= 50:
     validation_steps = int(validation_steps / 2)
     
-model.fit(x=train_dataset, epochs=C.num_epochs, steps_per_epoch = steps_per_epoch, validation_steps = validation_steps, initial_epoch = start_epoch, verbose='auto', validation_data=val_dataset, callbacks=[reduce_lr, checkpoint, early_stopping, LogRunMetrics()])
-    
+hist = model.fit(x=train_dataset, epochs=C.num_epochs, steps_per_epoch = steps_per_epoch, validation_steps = validation_steps, initial_epoch = start_epoch, verbose='auto', validation_data=val_dataset, callbacks=[reduce_lr, checkpoint, early_stopping, LogRunMetrics()])
+     
 
 print('Primary training complete, starting fine tuning for 1 epoch.')
 #set all layers of the FRCNN model to trainable, however we dont set the BERT model layers trainable
@@ -251,9 +253,9 @@ model_all.trainable = True
 
 
 if model_type == 'ZSL':
-    checkpoint_path = './outputs/model/ZSL_FRCNN_fine_tune_epoch--total_loss-{total_loss:.2f}.hdf5'
+    checkpoint_path = './outputs/model/ZSL_FRCNN_fine_tune_epoch-total_loss-{total_loss:.2f}.hdf5'
 else:
-    checkpoint_path = './outputs/model/FRCNN_fine_tune_epoch--total_loss-{total_loss:.2f}.hdf5'
+    checkpoint_path = './outputs/model/FRCNN_fine_tune_epoch-total_loss-{total_loss:.2f}.hdf5'
 
 #set up callbacks
 checkpoint = callbacks.ModelCheckpoint(filepath=checkpoint_path, save_weights_only=True, verbose=1)

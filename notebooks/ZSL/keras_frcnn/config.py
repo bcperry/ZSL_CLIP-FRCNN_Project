@@ -20,11 +20,11 @@ class Config:
         self.output_weight_path = r'C:\Data_drive\workspace\FRCNN\model.hdf5'
         
         #path to the input weights. If trainining for the first time use None to load imagenet weights and/ or standard BERT weights
-        self.input_weight_path = None#r"C:\Data_drive\Github\GEOINT_Zero-shot_Object_identification\notebooks\ZSL\outputs\FRCNN model\FRCNN_epoch23-total_loss-0.40.hdf5"
+        self.input_weight_path = None#r"C:\Data_drive\Github\GEOINT_Zero-shot_Object_identification\notebooks\ZSL\outputs\model\FRCNN_epoch82-total_loss-2.03.hdf5"
         
         self.text_dict_pickle = None#r"xview_attribute_dict_text.pickle"
         
-        self.batch_size = 40
+        self.batch_size = 1
         
         #CLIP projection settings
         
@@ -48,17 +48,16 @@ class Config:
         self.rot_90 = False
   
         # anchor box information
-        self.anchor_box_scales = [128, 256, 512]#[5, 10, 20, 50, 100]
+        self.anchor_box_scales = [64, 128, 256]#[5, 10, 20, 50, 100]
         self.anchor_box_ratios = [[1, 1], [1, 2], [2, 1]]
   
         # size to resize the smallest side of the image
-        self.im_size = 413
+        self.im_size = 300
   
         # image channel-wise mean to subtract
-        self.img_channel_mean = [103.939, 116.779, 123.68] #[R, G, B]
-        self.img_scaling_factor = 1.0
-  
-  
+        #self.img_channel_mean = [0,0,0]#[103.939, 116.779, 123.68] #[R, G, B]
+        #self.img_scaling_factor = 1.0
+
   
         # stride at the RPN (this depends on the network configuration)
         self.rpn_stride = 16

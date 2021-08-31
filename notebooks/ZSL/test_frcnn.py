@@ -31,26 +31,20 @@ def format_img_size(img, C):
 	""" formats the image size based on config """
 	img_min_side = float(C.im_size)
 	(height,width,_) = img.shape
-		
-	if width <= height:
-		ratio = img_min_side/width
-		new_height = int(ratio * height)
-		new_width = int(img_min_side)
-	else:
-		ratio = img_min_side/height
-		new_width = int(ratio * width)
-		new_height = int(img_min_side)
-	img = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
+	ratio = (img_min_side/width, img_min_side/height)
+	img = cv2.resize(img, (C.im_size, C.im_size), interpolation=cv2.INTER_CUBIC)
 	return img, ratio	
 
 def format_img_channels(img, C):
 	""" formats the image channels based on config """
 	img = img[:, :, (2, 1, 0)]
-	img = img.astype(np.float32)
+	#img = img.astype(np.float32)
+	'''
 	img[:, :, 0] -= C.img_channel_mean[0]
 	img[:, :, 1] -= C.img_channel_mean[1]
 	img[:, :, 2] -= C.img_channel_mean[2]
 	img /= C.img_scaling_factor
+    '''
 	img = np.transpose(img, (2, 0, 1))
 	img = np.expand_dims(img, axis=0)
 	return img
@@ -63,11 +57,11 @@ def format_img(img, C):
 
 # Method to transform the coordinates of the bounding box to its original size
 def get_real_coordinates(ratio, x1, y1, x2, y2):
-
-	real_x1 = int(round(x1 // ratio))
-	real_y1 = int(round(y1 // ratio))
-	real_x2 = int(round(x2 // ratio))
-	real_y2 = int(round(y2 // ratio))
+	width_ratio, height_ratio = ratio
+	real_x1 = int(round(x1 // width_ratio))
+	real_y1 = int(round(y1 // height_ratio))
+	real_x2 = int(round(x2 // width_ratio))
+	real_y2 = int(round(y2 // height_ratio))
 
 	return (real_x1, real_y1, real_x2 ,real_y2)
 
@@ -185,27 +179,28 @@ if os.path.isdir('./outputs/model/') and C.input_weight_path is None:
         
 if model_type == 'ZSL':
 
-    Dual_FRCNN = Dual_FRCNN(model_rpn, model_all, text_encoder, C)
-    Dual_FRCNN.built = True
+    model = Dual_FRCNN(model_rpn, model_all, text_encoder, C)
+    model.built = True
 else:
 
-    FRCNN = FRCNN(model_rpn, model_all, C)
-    FRCNN.built = True
+    model = FRCNN(model_rpn, model_all, C)
+    model.built = True
 #load weights to the model
 try:
-
     if (C.input_weight_path == None):
         print('Loaded imagenet weights to the vision backbone.')
     else:
+        model.built = True
         if model_type == 'FRCNN':
-            FRCNN.load_weights(C.input_weight_path)
+            model.load_weights(C.input_weight_path, by_name=True)
             print(f'loading FRCNN weights from {C.input_weight_path}')
         else:
             if (C.input_weight_path == None):
+                print('Loaded imagenet weights to the vision backbone.')
                 print('Loaded pretrained BERT weights to the text encoder.')
             else:
-                print(f'loading text_encoder weights from {C.input_weight_path}')
-                Dual_FRCNN.load_weights(C.input_weight_path)
+                model.load_weights(C.input_weight_path, by_name=True)
+                print(f'loading dual encoder weights from {C.input_weight_path}')
 except:
     print('Could not load pretrained model weights.')
 all_imgs = []
@@ -224,17 +219,20 @@ for idx, img_name in enumerate(sorted(os.listdir(img_path))):
     print(img_name)
     st = time.time()
     filepath = os.path.join(img_path,img_name)
-
+    #reads in BGR
     img = cv2.imread(filepath)
+    #convert to RGB
+    #img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)    
 
     X, ratio = format_img(img, C)
+    #X = tf.cast(tf.image.resize(img, size=(C.im_size, C.im_size)), tf.uint8)
 
     X = np.transpose(X, (0, 2, 3, 1))
-
+    
 	# get the feature maps and output from the RPN
     P_rpn = model_rpn.predict(X)
 
-    R = roi_helpers.rpn_to_roi(C, P_rpn[0], P_rpn[1], use_regr=True, overlap_thresh=0.3, max_boxes=900)
+    R = roi_helpers.rpn_to_roi(C, P_rpn[0], P_rpn[1], use_regr=True, overlap_thresh=0.8, max_boxes=300)
 
 	# convert from (x1,y1,x2,y2) to (x,y,w,h)
     R[:, 2] -= R[:, 0]
@@ -310,9 +308,13 @@ for idx, img_name in enumerate(sorted(os.listdir(img_path))):
             cv2.rectangle(img, (textOrg[0] - 5, textOrg[1]+baseLine - 5), (textOrg[0]+retval[0] + 5, textOrg[1]-retval[1] - 5), (0, 0, 0), 2)
             cv2.rectangle(img, (textOrg[0] - 5,textOrg[1]+baseLine - 5), (textOrg[0]+retval[0] + 5, textOrg[1]-retval[1] - 5), (255, 255, 255), -1)
             cv2.putText(img, textLabel, textOrg, cv2.FONT_HERSHEY_DUPLEX, 1, (0, 0, 0), 1)
-
+        
     print(f'Elapsed time = {(time.time() - st)}')
     print(all_dets)
-
-    cv2.imwrite('./results_imgs-fp-mappen-test/{}.png'.format(os.path.splitext(str(img_name))[0]),img)
+    cv2.imshow('image window', img)
+    # add wait key. window waits until user presses a key
+    cv2.waitKey(0)
+    # and finally destroy/close all open windows
+    cv2.destroyAllWindows()
+    
 
