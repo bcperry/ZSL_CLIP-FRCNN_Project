@@ -27,7 +27,6 @@ class FRCNN(keras.Model):
         self.feature_map_width = feature_map_width
         self.feature_map_height = feature_map_height
         self.accuracy = tf.keras.metrics.CategoricalAccuracy(name="classifier_accuracy")
-        self.batch_no = 0
         self.prev_batch = None
         self.total_loss = keras.metrics.Mean(name="total_loss")
         self.rpn_cls_loss = keras.metrics.Mean(name="rpn_cls_loss")
@@ -84,21 +83,7 @@ class FRCNN(keras.Model):
         class_loss_cls = class_loss_cls(frcnn_targets[2], frcnn_pred[2])
         class_loss_regr = class_loss_regr(frcnn_targets[3], frcnn_pred[3])
         self.accuracy.update_state(frcnn_targets[2], frcnn_pred[2])
-        
-        count = 0
-        for im in range(frcnn_pred[2].shape[0]):
-            for item in range(frcnn_pred[2][im].shape[0]):
-                high_prob = np.argmax(frcnn_pred[2][im][item])
-                if high_prob != 0:
-                    truth = np.argmax(frcnn_targets[2][im][item])
-                    '''
-                    print('image: ' + str(im))
-                    print('proposal: ' + str(item))
-                    print('pred: ' + str(high_prob))
-                    print('truth: ' + str(truth))
-                    '''
-                    if truth == high_prob:
-                        count +=1      
+  
         return [rpn_loss_cls, rpn_loss_regr, class_loss_cls, class_loss_regr]
 
     

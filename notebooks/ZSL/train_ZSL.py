@@ -163,11 +163,9 @@ with strategy.scope():
 if model_type == 'ZSL':
     with strategy.scope():
         model = Dual_FRCNN(model_rpn, model_all, text_encoder, C)
-        loss_fns = [losses.rpn_loss_cls(num_anchors), losses.rpn_loss_regr(num_anchors), losses.class_loss_cls, losses.class_loss_regr(len(num_ids)-1)]
         model.compile(optimizer= optimizer, run_eagerly = True)
 else:
     with strategy.scope():
-        loss_fns = [losses.rpn_loss_cls(num_anchors), losses.rpn_loss_regr(num_anchors), losses.class_loss_cls, losses.class_loss_regr(num_ids-1)]
         model = FRCNN(model_rpn, model_all, C)
         model.compile(optimizer= optimizer, run_eagerly=True)
 
@@ -210,7 +208,7 @@ try:
                 print('Loaded imagenet weights to the vision backbone.')
                 print('Loaded pretrained BERT weights to the text encoder.')
             else:
-                model.load_weights(C.input_weight_path, by_name=True)
+                model.load_weights(C.input_weight_path, by_name=True, skip_mismatch=True)
                 print(f'loading dual encoder weights from {C.input_weight_path}')
 except:
     print('Could not load pretrained model weights.')

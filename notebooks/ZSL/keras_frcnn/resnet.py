@@ -223,7 +223,7 @@ def classifier_ZSL(base_layers, input_rois, num_rois, num_projection_layers, pro
 
     out = TimeDistributed(Flatten())(out)
 
-    out_class_projection = TimeDistributed(Dense(projection_dims, activation='softmax'), name='dense_class_projection_{}_classes'.format(nb_classes))(out)
+    out_class_projection = TimeDistributed(Dense(projection_dims, activation='softmax'), name='dense_embedding_projection')(out)
     # note: no regression target for bg class
     out_regr = TimeDistributed(Dense(4 * (nb_classes-1), activation='linear', kernel_initializer='zero'), name='dense_regress_{}'.format(nb_classes))(out)
 
