@@ -25,18 +25,12 @@ def get_class_map(C):
     class_mapping = {}
     file = open(label_file[0], "r")
     
+    class_mapping['bg'] = 0
+    
     #create a class label dictionary
     for line in file:
         key, value = line.split(':')
         class_mapping[value.strip()] = int(key)
-
-    if 'bg' not in class_mapping:
-        #add the background class
-        if class_mapping[min(class_mapping, key=class_mapping.get)] != 0:
-            class_mapping['bg'] = 0
-        else:
-            print('a class with id 0 exists')
-            exit()
     
     return class_mapping
 
