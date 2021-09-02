@@ -6,10 +6,18 @@ class Config:
         #common user defined information
         
         #path to the training data
+        '''
+        self.data_path = r'C:\\Data_drive\\Data\\'
+        self.train_path = r"xview_train_sample_vehicles.record"
+        self.val_path = r"xview_test_sample_vehicles.record"
+        self.class_text = r'xview_class_labels_vehicles_only.txt'
+        
+        '''
         self.data_path = r'C:\\Data_drive\\Data\\'
         self.train_path = r"pascal_train.record"
         self.val_path = r"pascal_test.record"
         self.class_text = r'pascal_class_labels.txt'
+        
         
         #number of epochs to train
         self.num_epochs = 25
@@ -20,7 +28,7 @@ class Config:
         self.output_weight_path = r'C:\Data_drive\workspace\FRCNN\model.hdf5'
         
         #path to the input weights. If trainining for the first time use None to load imagenet weights and/ or standard BERT weights
-        self.input_weight_path = None#r"C:\Data_drive\Github\GEOINT_Zero-shot_Object_identification\notebooks\ZSL\outputs\model\FRCNN_epoch82-total_loss-2.03.hdf5"
+        self.input_weight_path = r"C:\Data_drive\Github\GEOINT_Zero-shot_Object_identification\notebooks\ZSL\outputs\model\ZSL_FRCNN_epoch129-total_loss-2.26.hdf5"
         
         self.text_dict_pickle = None#r"xview_attribute_dict_text.pickle"
         

@@ -182,6 +182,7 @@ try:
                 print(f'loading dual encoder weights from {C.input_weight_path}')
 except:
     print('Could not load pretrained model weights.')
+    exit()
 all_imgs = []
 
 classes = {}

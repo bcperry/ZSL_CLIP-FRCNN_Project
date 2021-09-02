@@ -1,6 +1,7 @@
 import os
 import collections
 import json
+import argparse
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
@@ -12,8 +13,19 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 from tqdm import tqdm
 from keras.callbacks import Callback
-from azureml.core import Run
+#from azureml.core import Run
 
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+  try:
+    # Currently, memory growth needs to be the same across GPUs
+    for gpu in gpus:
+      tf.config.experimental.set_memory_growth(gpu, True)
+    logical_gpus = tf.config.list_logical_devices('GPU')
+    print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+  except RuntimeError as e:
+    # Memory growth must be set before GPUs have been initialized
+    print(e)
 
 
 
@@ -248,7 +260,7 @@ text_encoder = create_text_encoder(
 )
 dual_encoder = DualEncoder(text_encoder, vision_encoder, temperature=0.05)
 dual_encoder.compile(
-    optimizer=tfa.optimizers.AdamW(learning_rate=0.001, weight_decay=0.001), metrics=['accuracy']
+    optimizer=tfa.optimizers.AdamW(learning_rate=0.001, weight_decay=0.001), metrics=['accuracy'], run_eagerly = True
 )
 
 """
@@ -274,7 +286,7 @@ reduce_lr = keras.callbacks.ReduceLROnPlateau(
 early_stopping = tf.keras.callbacks.EarlyStopping(
     monitor="val_loss", patience=5, restore_best_weights=True
 )
-
+'''
 # start an Azure ML run
 run = Run.get_context()
 
@@ -284,12 +296,12 @@ class LogRunMetrics(Callback):
     def on_epoch_end(self, epoch, log):
         # log a value repeated which creates a list
         run.log('Loss', log['val_loss'])
-
+'''
 history = dual_encoder.fit(
     train_dataset,
     epochs=num_epochs,
     validation_data=valid_dataset,
-    callbacks=[reduce_lr, early_stopping, LogRunMetrics()],
+    callbacks=[reduce_lr, early_stopping],
 )
 
 

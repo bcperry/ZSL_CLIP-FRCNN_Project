@@ -18,7 +18,6 @@ from keras_frcnn import train_helpers
 from keras_frcnn.dual_frcnn import Dual_FRCNN
 from keras_frcnn.frcnn import FRCNN
 from keras_frcnn import CLIP
-from keras_frcnn import losses as losses
 
 from keras_frcnn.tfrecord_parser import get_data
 
@@ -100,13 +99,14 @@ if model_path_regex.group(2) != '.hdf5':
 train_dataset, total_train_records = get_data(C.train_path, C)
 val_dataset, total_val_records = get_data(C.val_path, C)
 
-C.class_mapping = train_helpers.get_class_map(C)
+C.class_mapping = train_helpers.get_class_map(C, None)
 
 if C.text_dict_pickle is not None:
     C.class_text = train_helpers.get_class_text(C)
 else:
-    C.class_text = [f"This is a picture of a {key}" for key in C.class_mapping.keys()]
-
+    C.class_text = train_helpers.get_class_map(C, r'pascal_class_text.txt')
+    
+C.class_text = list(C.class_text.keys())
 #find the largest class id and add 1 for the background class
 num_ids = len(C.training_classes) + 1
 

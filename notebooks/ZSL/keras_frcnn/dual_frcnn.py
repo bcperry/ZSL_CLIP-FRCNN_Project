@@ -13,7 +13,7 @@ from tensorflow.keras.losses import categorical_crossentropy
 from . import resnet as nn
 from . import train_helpers
 from keras_frcnn.tfrecord_parser import batch_processor
-
+from keras_frcnn.debug_helper import show_train_img
 
 
 
@@ -160,7 +160,8 @@ class Dual_FRCNN(keras.Model):
                 for j,text in enumerate(im):        
                     bert_embeddings[i][j] = train_helpers.bert_embed(text, C)
             text_batch = bert_embeddings
-
+        
+        show_train_img(img_data[0], X[0], Y[0:2], C, pos_samples, X_temp[0])
         with tf.GradientTape() as tape:
             # Forward pass
             frcnn_pred, text_embedding = self([X, text_batch], training=True)

@@ -19,13 +19,19 @@ def bert_embed(text, C):
     embed = C.bert_embeddings[index]
     return embed
 
-def get_class_map(C):
+def get_class_map(C, filename):
     
-    label_file = glob.glob(C.data_path + C.class_text)
+    if filename is not None:
+        class_text = filename
+    else:
+        class_text = C.class_text
+    
+    label_file = glob.glob(C.data_path + class_text)
     class_mapping = {}
     file = open(label_file[0], "r")
     
-    class_mapping['bg'] = 0
+    if filename is None:
+        class_mapping['bg'] = 0
     
     #create a class label dictionary
     for line in file:
@@ -35,6 +41,7 @@ def get_class_map(C):
     return class_mapping
 
 def get_class_text(C):
+
     pickle_file = glob.glob(C.data_path + C.text_dict_pickle)
     class_text = pd.read_pickle(pickle_file[0])
     class_text_mapping = {}
