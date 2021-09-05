@@ -222,8 +222,15 @@ def classifier_ZSL(base_layers, input_rois, num_rois, num_projection_layers, pro
     out = classifier_layers(out_roi_pool, input_shape=input_shape, trainable=True)
 
     out = TimeDistributed(Flatten())(out)
+    
+    projected_embeddings = TimeDistributed(layers.Dense(units=projection_dims))(out)
+    for _ in range(num_projection_layers):
+        x = TimeDistributed(layers.Dense(units=projection_dims, activation='gelu'))(projected_embeddings)
+        x = TimeDistributed(layers.Dropout(dropout_rate))(x)
+        x = TimeDistributed(layers.Add())([projected_embeddings, x])
+        projected_embeddings = TimeDistributed(layers.LayerNormalization())(x)
 
-    out_class_projection = TimeDistributed(Dense(projection_dims, activation='softmax'), name='dense_embedding_projection')(out)
+    out_class_projection = projected_embeddings
     # note: no regression target for bg class
     out_regr = TimeDistributed(Dense(4 * (nb_classes-1), activation='linear', kernel_initializer='zero'), name='dense_regress_{}'.format(nb_classes))(out)
 

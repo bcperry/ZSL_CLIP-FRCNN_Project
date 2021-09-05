@@ -1,6 +1,5 @@
 import tensorflow as tf
 import glob
-import numpy
 
 
 def batch_processor(batch, C):
@@ -37,13 +36,18 @@ def batch_processor(batch, C):
             
         class_name = []
         
+        #convert from classes used by xview (if classes are different) into the classes used here
+        #for i,cls in enumerate(class_id):
+        #   class_id[i] = C.class_conv[cls]
+        
         for cls in range(len(class_id)):
+            
+            
+            if class_id[cls] not in C.training_classes:
+                continue
             class_name.append(class_dict[class_id[cls]])
     
         for i in range(len(class_name)):
-            #Convert from class id numbers to text
-            for cls in range(len(class_id)):
-                class_name.append(class_dict[class_id[cls]])
                                    
             if im not in imgs:
                 imgs[im] = {}

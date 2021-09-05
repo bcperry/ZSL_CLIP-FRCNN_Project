@@ -101,13 +101,22 @@ val_dataset, total_val_records = get_data(C.val_path, C)
 
 C.class_mapping = train_helpers.get_class_map(C, None)
 
+
+
+#this gets the class text associated with the class names
 if C.text_dict_pickle is not None:
     C.class_text = train_helpers.get_class_text(C)
+    C.class_text = list(C.class_text.values())
 else:
     C.class_text = train_helpers.get_class_map(C, r'pascal_class_text.txt')
+    C.class_text = list(C.class_text.keys())
+
+#this will renumber from 0 - x if the class keys are out of order
+for i,item in enumerate(list(C.class_mapping.keys())):
+    C.class_conv[C.class_mapping[item]] = i
+    C.class_mapping[item]=i
     
-C.class_text = list(C.class_text.keys())
-#find the largest class id and add 1 for the background class
+#find the number of classes and add 1 for the background class
 num_ids = len(C.training_classes) + 1
 
 print(f'Num train samples {total_train_records}')
@@ -208,8 +217,16 @@ try:
                 print('Loaded imagenet weights to the vision backbone.')
                 print('Loaded pretrained BERT weights to the text encoder.')
             else:
-                model.load_weights(C.input_weight_path, by_name=True, skip_mismatch=True)
                 print(f'loading dual encoder weights from {C.input_weight_path}')
+                prev_wt = model_all.get_layer('time_distributed_5').weights[1].numpy()[0]
+                prev_wt2 = model_all.get_layer('res5c_branch2a').weights[1].numpy()[0]
+                model.load_weights(C.input_weight_path, by_name=True, skip_mismatch=True)
+                post_wt = model_all.get_layer('time_distributed_5').weights[1].numpy()[0]
+                post_wt2 = model_all.get_layer('res5c_branch2a').weights[1].numpy()[0]
+                if prev_wt2 == post_wt2:
+                    print('weights failed to load properly')
+                    import sys
+                    sys.exit()
 except:
     print('Could not load pretrained model weights.')
 

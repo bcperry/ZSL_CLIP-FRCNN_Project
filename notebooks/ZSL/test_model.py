@@ -1,8 +1,6 @@
 from __future__ import division
-import re
 import argparse
 import os
-import glob
 import time
 import cv2
 
@@ -19,11 +17,9 @@ from keras_frcnn import resnet as nn
 from keras_frcnn import train_helpers
 from keras_frcnn import CLIP
 
-from keras_frcnn import data_generators
 from keras_frcnn.dual_frcnn import Dual_FRCNN
 from keras_frcnn.frcnn import FRCNN
 import keras_frcnn.roi_helpers as roi_helpers
-from keras_frcnn.tfrecord_parser import get_data
 
 import logging
 
@@ -88,6 +84,7 @@ if gpus:
 parser = argparse.ArgumentParser()
 parser.add_argument('--path', type=str, dest='path', default=None, help='data folder containing tfrecord files and label file')
 parser.add_argument('--input-weight-path', type=str, dest='input_weight_path', default=None, help='file containing pre-trained model weights')
+parser.add_argument('--num-rois', type=int, dest='num_rois', default=5, help='number of regions of interest to process')
 parser.add_argument('--model-type', type=str, dest='model_type', default='ZSL', help='ZSL or FRCNN')
 
 
@@ -96,6 +93,7 @@ args = parser.parse_args()
 model_type = args.model_type
 input_weight_path = args.input_weight_path 
 img_path = args.path
+num_rois = args.num_rois
 
 # pass the settings from the command line, and persist them in the config object
 C = config.Config()
@@ -106,18 +104,22 @@ if input_weight_path is not None:
 else:
     print('must provide a weight file')
 
+C.num_rois = num_rois
 
-C.class_mapping = train_helpers.get_class_map(C)
+C.class_mapping = train_helpers.get_class_map(C, None)
 class_mapping_inv = {v: k for k, v in C.class_mapping.items()}
 class_to_color = {C.class_mapping[v]: np.random.randint(0, 255, 3) for v in C.class_mapping}
 
+#this gets the class text associated with the class names
 if C.text_dict_pickle is not None:
     C.class_text = train_helpers.get_class_text(C)
+    C.class_text = list(C.class_text.values())
 else:
-    C.class_text = [f"This is a picture of a {key}" for key in C.class_mapping.keys()]
+    C.class_text = train_helpers.get_class_map(C, r'pascal_class_text.txt')
+    C.class_text = list(C.class_text.keys())
 
 #find the largest class id and add 1 for the background class
-num_ids = len(C.training_classes) + 1
+num_ids = len(C.training_classes)
 
 #since we are using square images, we know the image size we will be scaling to
 input_shape_img = (None, None, 3)
@@ -178,8 +180,16 @@ try:
                 print('Loaded imagenet weights to the vision backbone.')
                 print('Loaded pretrained BERT weights to the text encoder.')
             else:
-                model.load_weights(C.input_weight_path, by_name=True)
                 print(f'loading dual encoder weights from {C.input_weight_path}')
+                prev_wt = model_all.get_layer('time_distributed_5').weights[1].numpy()[0]
+                prev_wt2 = model_all.get_layer('res5c_branch2a').weights[1].numpy()[0]
+                model.load_weights(C.input_weight_path, by_name=True, skip_mismatch=True)
+                post_wt = model_all.get_layer('time_distributed_5').weights[1].numpy()[0]
+                post_wt2 = model_all.get_layer('res5c_branch2a').weights[1].numpy()[0]
+                if prev_wt2 == post_wt2:
+                    print('weights failed to load properly')
+                    import sys
+                    sys.exit()
 except:
     print('Could not load pretrained model weights.')
     exit()
@@ -191,7 +201,11 @@ bbox_threshold = 0.8
 
 visualise = True
 
-
+if model_type == 'ZSL':
+    print(f"Generating embeddings for {len(C.class_text)} labels...")
+    text_embeddings = text_encoder.predict(C.bert_embeddings)
+    print(f"Text embeddings shape: {text_embeddings.shape}.")
+    
 
 for idx, img_name in enumerate(sorted(os.listdir(img_path))):
     if not img_name.lower().endswith(('.bmp', '.jpeg', '.jpg', '.png', '.tif', '.tiff')):
@@ -200,12 +214,9 @@ for idx, img_name in enumerate(sorted(os.listdir(img_path))):
     st = time.time()
     filepath = os.path.join(img_path,img_name)
     #reads in BGR
-    img = cv2.imread(filepath)
-    #convert to RGB
-    #img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)    
+    img = cv2.imread(filepath) 
 
     X, ratio = format_img(img, C)
-    #X = tf.cast(tf.image.resize(img, size=(C.im_size, C.im_size)), tf.uint8)
 
     X = np.transpose(X, (0, 2, 3, 1))
     
@@ -237,11 +248,35 @@ for idx, img_name in enumerate(sorted(os.listdir(img_path))):
             ROIs = ROIs_padded
 
         P_all = model_all.predict([X, ROIs])
+        
+        
+        if model_type == 'ZSL':
+        
+            dot_similarity = tf.matmul(P_all[2][0], 100 * text_embeddings, transpose_b=True)
+            true_probs = tf.keras.activations.softmax(dot_similarity, axis=1)
+            results = []
+            probabilities = []
+            results_topk = []
+            probs_topk = []
+            
+            for roi in range(true_probs.shape[0]):
+                results.append(tf.math.top_k(dot_similarity[roi], 1).indices.numpy())
+                probabilities.append(tf.math.top_k(true_probs[roi], 1).values.numpy())
+                results_topk.append(tf.math.top_k(dot_similarity[roi], 5).indices.numpy())
+                probs_topk.append(tf.math.top_k(true_probs[roi], 5).values.numpy())
+            results = np.array(results)
+            probabilities = np.array(probs)
+            results_topk = np.array(results_topk)
+            probs_topk = np.array(probs_topk)
+            
+            #replace the image embedding output with the class probabilities calculated above
+            P_all[2] = np.expand_dims(true_probs, axis = 0)
+            
         P_cls = P_all[2]
         P_regr = P_all[3]
 
         for ii in range(P_cls.shape[1]):
-
+            
             if np.max(P_cls[0, ii, :]) < bbox_threshold or np.argmax(P_cls[0, ii, :]) == 0:
                 continue
 
@@ -271,7 +306,7 @@ for idx, img_name in enumerate(sorted(os.listdir(img_path))):
     for key in bboxes:
         bbox = np.array(bboxes[key])
 
-        new_boxes, new_probs = roi_helpers.non_max_suppression_fast(bbox, np.array(probs[key]), overlap_thresh=0.5)
+        new_boxes, new_probs = roi_helpers.non_max_suppression_fast(bbox, np.array(probs[key]), overlap_thresh=0.1)
 
         for jk in range(new_boxes.shape[0]):
             (x1, y1, x2, y2) = new_boxes[jk,:]
@@ -290,12 +325,12 @@ for idx, img_name in enumerate(sorted(os.listdir(img_path))):
             cv2.rectangle(img, (textOrg[0] - 5,textOrg[1]+baseLine - 5), (textOrg[0]+retval[0] + 5, textOrg[1]-retval[1] - 5), (255, 255, 255), -1)
             cv2.putText(img, textLabel, textOrg, cv2.FONT_HERSHEY_DUPLEX, 1, (0, 0, 0), 1)
             
-        print(f'Elapsed time = {(time.time() - st)}')
-        print(all_dets)
-        cv2.imshow('image window', img)
-        # add wait key. window waits until user presses a key
-        cv2.waitKey(0)
-        # and finally destroy/close all open windows
-        cv2.destroyAllWindows()
+    print(f'Elapsed time = {(time.time() - st)}')
+    print(all_dets)
+    cv2.imshow('image window', img)
+    # add wait key. window waits until user presses a key
+    cv2.waitKey(0)
+    # and finally destroy/close all open windows
+    cv2.destroyAllWindows()
         
     

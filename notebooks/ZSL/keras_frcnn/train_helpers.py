@@ -36,6 +36,8 @@ def get_class_map(C, filename):
     #create a class label dictionary
     for line in file:
         key, value = line.split(':')
+        if int(key) not in C.training_classes:
+            continue
         class_mapping[value.strip()] = int(key)
     
     return class_mapping
@@ -109,6 +111,8 @@ def get_data_parallel(inputs):
                 selected_neg_samples = np.random.choice(neg_samples, C.num_rois - len(selected_pos_samples), replace=True).tolist()
     
         sel_samples = selected_pos_samples + selected_neg_samples
+        #shuffle the list so that the positives are not always the first two
+        random.shuffle(sel_samples)
     else:
         # in the extreme case where num_rois = 1, we pick a random pos or neg sample
         selected_pos_samples = pos_samples
@@ -116,19 +120,27 @@ def get_data_parallel(inputs):
         if np.random.randint(0, 2):
             sel_samples = random.choice(neg_samples)
         else:
-            sel_samples = random.choice(pos_samples)
+            
+            if len(selected_pos_samples) == 0:
+                sel_samples = random.choice(neg_samples)
+            else:
+                sel_samples = random.choice(pos_samples)
             
     #cast Y1 and Y2 to float32 in case there are no positive samples in the selection
     Y1 = Y1.astype('float32')
     Y2 = Y2.astype('float32')
     
-    #shuffle the list so that the positives are not always the first two
-    random.shuffle(sel_samples)
+    
     
     X2 = X2[:, sel_samples, :]
     Y1 = Y1[:, sel_samples, :]
     Y2 = Y2[:, sel_samples, :]
     selected_sample_texts = class_text[:, sel_samples]
+    if C.num_rois == 1:
+        selected_sample_texts = np.expand_dims(selected_sample_texts, axis = 0)
+        X2 = np.expand_dims(X2, axis = 0)
+        Y1 = np.expand_dims(Y1, axis = 0)
+        Y2 = np.expand_dims(Y2, axis = 0)
     
     Y1_rpn_batch = rpn_targets[0][0]
     Y2_rpn_batch = rpn_targets[1][0]
@@ -157,10 +169,10 @@ def parallelize(C, X, img_data, P_rpn):
     bad_images = 0
     
     #for debugging*************************************************************************************************************************************
-
+    '''
     for im in range(X.shape[0]):
         get_data_parallel([C, X[im], img_data[im], [P_rpn[0][im:im+1], P_rpn[1][im:im+1]]])
-
+'''
 
     with ThreadPoolExecutor(max_workers=C.batch_size) as executor:
         futures = [executor.submit(get_data_parallel, [C, X[im], img_data[im], [P_rpn[0][im:im+1], P_rpn[1][im:im+1]]]) for im in range(X.shape[0])]

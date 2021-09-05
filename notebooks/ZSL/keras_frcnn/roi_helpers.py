@@ -78,10 +78,15 @@ def calc_iou(C, R, img_data):
             class_num = 0
         else:
             #this was the most annoying bug in the history of time
-            class_num = class_mapping[cls_name] #C.training_classes.index(class_mapping[cls_name])
-
-        class_text.append(C.class_text[class_mapping[cls_name]])
-        class_label = (num_classes) * [0] #add 1 here to account for the 0 class
+            class_num = class_mapping[cls_name]
+        
+        if class_num > num_classes:
+            print()
+        try:
+            class_text.append(C.class_text[class_mapping[cls_name]])
+        except:
+            print()
+        class_label = (num_classes) * [0] 
         class_label[class_num] = 1
         y_class_num.append(copy.deepcopy(class_label))
         coords = [0] * 4 * (num_classes - 1)

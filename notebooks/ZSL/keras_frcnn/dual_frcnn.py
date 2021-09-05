@@ -18,7 +18,6 @@ from keras_frcnn.debug_helper import show_train_img
 
 
 class Dual_FRCNN(keras.Model):
-    #def __init__(self, rpn, frcnn, text_encoder, C, **kwargs):
     def __init__(self, rpn, frcnn, text_encoder, C, **kwargs):
         super(Dual_FRCNN, self).__init__(**kwargs)
         self.rpn = rpn
@@ -92,6 +91,10 @@ class Dual_FRCNN(keras.Model):
 
         
         def dual_loss_cls(text_embedding, image_embeddings):
+            
+            if self.C.num_rois == 1:
+                text_embedding =  tf.transpose(text_embedding, perm=[1,0,2])
+                image_embeddings =  tf.transpose(image_embeddings, perm=[1,0,2])
              # logits[i][j] is the dot_similarity(caption_i, image_j).
             logits = (
                 tf.matmul(text_embedding, image_embeddings, transpose_b=True)
@@ -154,17 +157,17 @@ class Dual_FRCNN(keras.Model):
             #TODO: this is a hack, fix it later it can fail on the first batch.
             print("The RPN failed to propose useable regions in this batch, reverting to training on last good training batch")
             X, text_batch, Y = self.prev_batch
-        else: 
+        else:
             bert_embeddings = np.zeros(shape=(text_batch.shape[0], text_batch.shape[1], 512), dtype=float)
             for i,im in enumerate(text_batch):
                 for j,text in enumerate(im):        
                     bert_embeddings[i][j] = train_helpers.bert_embed(text, C)
-            text_batch = bert_embeddings
+
+        #show_train_img(img_data[0], X[0], Y[0:2], C, pos_samples, X_temp[0])
         
-        show_train_img(img_data[0], X[0], Y[0:2], C, pos_samples, X_temp[0])
         with tf.GradientTape() as tape:
             # Forward pass
-            frcnn_pred, text_embedding = self([X, text_batch], training=True)
+            frcnn_pred, text_embedding = self([X, bert_embeddings], training=True)
             loss = self.compute_loss(frcnn_pred, text_embedding, Y)
         # Backward pass
         gradients = tape.gradient(loss, self.trainable_variables)
@@ -172,7 +175,7 @@ class Dual_FRCNN(keras.Model):
         # Monitor loss
         #self.loss_tracker.update_state(loss)
         total_loss = np.average((loss[0].numpy() + loss[1].numpy() + np.average(loss[2].numpy()) + loss[3].numpy()))
-        self.prev_batch = [X, text_batch, Y]
+        self.prev_batch = [X, bert_embeddings, Y]
         self.rpn_cls_loss.update_state(loss[0].numpy()[0])
         self.rpn_reg_loss.update_state(loss[1].numpy()[0])
         self.embedding_loss.update_state( np.average(loss[2].numpy()))

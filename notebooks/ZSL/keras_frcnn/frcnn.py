@@ -111,7 +111,7 @@ class FRCNN(keras.Model):
             #print("The RPN failed to propose useable regions in this batch, reverting to training on last good training batch")
             X, Y, pos_samples = self.prev_batch
 
-        #show_train_img(img_data[0], X[0], Y[0:2], C, pos_samples, X_temp[0])
+        show_train_img(img_data[0], X[0], Y[0:2], C, pos_samples, X_temp[0])
         
         with tf.GradientTape() as tape:
             # Forward pass
