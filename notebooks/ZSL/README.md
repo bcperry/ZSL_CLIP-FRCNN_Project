@@ -8,7 +8,7 @@ USAGE:
 - first train a pure Faster-RCNN by calling:
 `python train_model.py --data-folder /path/to/folder/containing/tfrecords --input-weight-path /path/to/*.hdf5 --num-epochs X --model-type FRCNN --azure False`
 
-- After traininig the pure Faster-RCNN, train the dual FRCNN by calling
+- After training the pure Faster-RCNN, train the dual FRCNN by calling
 `python train_model.py --data-folder /path/to/folder/containing/tfrecords --input-weight-path /path/to/previously/traied/*.hdf5 --num-epochs X --model-type ZSL --azure False`
 
 - Running `train_ZSL.py` will write weights to an hdf5 file after each epoch with the format `MODEL_TYPE_epochXX-total_loss-XX.XX.hdf5` in both instances 
