@@ -82,7 +82,7 @@ if gpus:
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--path', type=str, dest='path', default=None, help='data folder containing tfrecord files and label file')
+parser.add_argument('--path', type=str, dest='path', default=None, help='data folder containing images')
 parser.add_argument('--input-weight-path', type=str, dest='input_weight_path', default=None, help='file containing pre-trained model weights')
 parser.add_argument('--num-rois', type=int, dest='num_rois', default=5, help='number of regions of interest to process')
 parser.add_argument('--model-type', type=str, dest='model_type', default='ZSL', help='ZSL or FRCNN')

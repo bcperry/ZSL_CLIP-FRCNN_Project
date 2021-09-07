@@ -12,7 +12,6 @@ from tensorflow.keras import backend as K
 from tensorflow.keras.losses import categorical_crossentropy
 from . import resnet as nn
 from . import train_helpers
-#from keras_frcnn.losses import rpn_loss_cls, rpn_loss_regr, class_loss_cls, class_loss_regr
 from keras_frcnn.tfrecord_parser import batch_processor
 from keras_frcnn.debug_helper import show_train_img
 
@@ -37,8 +36,24 @@ class FRCNN(keras.Model):
 
 
     def call(self, X, training=False):
+        pred_0 = []
+        pred_1 = []
+        pred_2 = []
+        pred_3 = []
         
-        return self.frcnn(X, training=training)
+        #in order to keep the images and ROIs together, we have to split the batch and run it individually before re-combining the answers
+        for im in range(X[0].shape[0]):
+            preds = self.frcnn([X[0][im:im+1], X[1][im:im+1]], training=training)
+            pred_0.append(preds[0][0])
+            pred_1.append(preds[1][0])
+            pred_2.append(preds[2][0])
+            pred_3.append(preds[3][0])
+                 
+        pred_0 = tf.stack(pred_0, axis=0)
+        pred_1 = tf.stack(pred_1, axis=0)
+        pred_2 = tf.stack(pred_2, axis=0)
+        pred_3 = tf.stack(pred_3, axis=0)
+        return [pred_0, pred_1, pred_2, pred_3]
 
     def compute_loss(self, frcnn_pred, frcnn_targets):
         
@@ -102,16 +117,17 @@ class FRCNN(keras.Model):
         img_data = img_data_temp
         
         P_rpn = self.rpn(X, training = False)
-
-        X, Y, pos_samples, discard, _ = train_helpers.second_stage_helper(X, P_rpn, img_data, C)
+        
+        X, Y, pos_samples, discard, _, batch_order = train_helpers.second_stage_helper(X, P_rpn, img_data, C)
         
         if X is None:
             #revert and train on the previous batch
             #TODO: this is a hack, fix it later it can fail on the first batch.
             #print("The RPN failed to propose useable regions in this batch, reverting to training on last good training batch")
             X, Y, pos_samples = self.prev_batch
-
-        show_train_img(img_data[0], X[0], Y[0:2], C, pos_samples, X_temp[0])
+        
+        #for im in range(len(img_data)):
+        #    show_train_img(img_data[batch_order.index(im)], np.expand_dims(X[0][im], axis = 0), [np.expand_dims(Y[0][im], axis = 0), np.expand_dims(Y[1][im], axis = 0)], C, pos_samples, X[0][im], True)
         
         with tf.GradientTape() as tape:
             # Forward pass
@@ -135,10 +151,6 @@ class FRCNN(keras.Model):
                 "class_cls_loss": self.class_cls_loss.result(), "class_reg_loss": self.class_reg_loss.result(), 
                 "total_loss": self.total_loss.result(), 
                 'classifier_accuracy': self.accuracy.result()}
-
-    def test_step(self, batch):
-        X = batch_processor(batch, self.C)
-        C = self.C
         #initialize new X and img_data 
         X_temp = np.zeros(shape=(len(X),C.im_size, C.im_size, 3),dtype='uint8')
         img_data_temp = []
@@ -146,14 +158,25 @@ class FRCNN(keras.Model):
             img_data_temp.append(X[i])
             X_temp[i] = X[i]['rawimage']
             
+
+    def test_step(self, batch):
+        X = batch_processor(batch, self.C)
+        C = self.C
+         #initialize new X and img_data 
+        X_temp = np.zeros(shape=(len(X),C.im_size, C.im_size, 3),dtype='uint8')
+        img_data_temp = []
+        for i in range(len(X)):
+            img_data_temp.append(X[i])
+            X_temp[i] = X[i]['rawimage']
+        
         X = X_temp
         img_data = img_data_temp
             
         P_rpn = self.rpn(X, training = False)
 
-        X, Y, pos_samples, discard, _ = train_helpers.second_stage_helper(X, P_rpn, img_data, C)
+        X, Y, pos_samples, discard, _, batch_order = train_helpers.second_stage_helper(X, P_rpn, img_data, C)
         
-        frcnn_pred = self(X, training=True)
+        frcnn_pred = self(X, training=False)
         loss  = self.compute_loss(frcnn_pred, Y)
         total_loss = np.average((loss[0].numpy() + loss[1].numpy() + loss[2].numpy() + loss[3].numpy()))
         self.rpn_cls_loss.update_state(loss[0].numpy()[0])

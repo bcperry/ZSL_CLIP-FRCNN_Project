@@ -16,7 +16,6 @@ from keras_frcnn.tfrecord_parser import batch_processor
 from keras_frcnn.debug_helper import show_train_img
 
 
-
 class Dual_FRCNN(keras.Model):
     def __init__(self, rpn, frcnn, text_encoder, C, **kwargs):
         super(Dual_FRCNN, self).__init__(**kwargs)
@@ -29,7 +28,6 @@ class Dual_FRCNN(keras.Model):
         self.feature_map_height = feature_map_height
         self.temperature = C.temperature
         self.prev_batch = None
-        self.accuracy = tf.keras.metrics.CategoricalAccuracy(name="classifier_accuracy")
         self.total_loss = keras.metrics.Mean(name="total_loss")
         self.rpn_cls_loss = keras.metrics.Mean(name="rpn_cls_loss")
         self.rpn_reg_loss = keras.metrics.Mean(name="rpn_reg_loss")
@@ -49,7 +47,25 @@ class Dual_FRCNN(keras.Model):
         text_embedding = tf.stack(text_embedding, axis=0)
         with tf.device("/gpu:0"):
             # Get the embeddings for the images.
-            image_embedding = self.frcnn(X[0], training=training)
+            pred_0 = []
+            pred_1 = []
+            pred_2 = []
+            pred_3 = []
+            
+            #in order to keep the images and ROIs together, we have to split the batch and run it individually before re-combining the answers
+            for im in range(X[0][0].shape[0]):
+                preds = self.frcnn([X[0][0][im:im+1], X[0][1][im:im+1]], training=training)
+                pred_0.append(preds[0][0])
+                pred_1.append(preds[1][0])
+                pred_2.append(preds[2][0])
+                pred_3.append(preds[3][0])
+                     
+            pred_0 = tf.stack(pred_0, axis=0)
+            pred_1 = tf.stack(pred_1, axis=0)
+            pred_2 = tf.stack(pred_2, axis=0)
+            pred_3 = tf.stack(pred_3, axis=0)
+            image_embedding = [pred_0, pred_1, pred_2, pred_3]
+            
 
         return image_embedding, text_embedding
     
@@ -92,9 +108,6 @@ class Dual_FRCNN(keras.Model):
         
         def dual_loss_cls(text_embedding, image_embeddings):
             
-            if self.C.num_rois == 1:
-                text_embedding =  tf.transpose(text_embedding, perm=[1,0,2])
-                image_embeddings =  tf.transpose(image_embeddings, perm=[1,0,2])
              # logits[i][j] is the dot_similarity(caption_i, image_j).
             logits = (
                 tf.matmul(text_embedding, image_embeddings, transpose_b=True)
@@ -125,11 +138,13 @@ class Dual_FRCNN(keras.Model):
             # Return the mean of the loss over the batch.
             return lambda_cls_class * (captions_loss + images_loss) / 2
 
+        text_embedding =  tf.transpose(text_embedding, perm=[1,0,2])
+        image_embeddings =  tf.transpose(frcnn_pred[2], perm=[1,0,2])
+                
         rpn_loss_cls = rpn_loss_cls(frcnn_targets[0], frcnn_pred[0])
         rpn_loss_regr = rpn_loss_regr(frcnn_targets[1], frcnn_pred[1])
-        dual_loss_cls = dual_loss_cls(text_embedding, frcnn_pred[2])
+        dual_loss_cls = dual_loss_cls(text_embedding, image_embeddings)
         class_loss_regr = class_loss_regr(frcnn_targets[3], frcnn_pred[3])
-        
         
 
         return [rpn_loss_cls, rpn_loss_regr, dual_loss_cls, class_loss_regr]
@@ -150,7 +165,7 @@ class Dual_FRCNN(keras.Model):
         
         P_rpn = self.rpn(X, training = False)
 
-        X, Y, pos_samples, discard, text_batch = train_helpers.second_stage_helper(X, P_rpn, img_data, C)
+        X, Y, pos_samples, discard, text_batch, batch_order = train_helpers.second_stage_helper(X, P_rpn, img_data, C)
         
         if X is None:
             #revert and train on the previous batch
@@ -163,7 +178,9 @@ class Dual_FRCNN(keras.Model):
                 for j,text in enumerate(im):        
                     bert_embeddings[i][j] = train_helpers.bert_embed(text, C)
 
-        #show_train_img(img_data[0], X[0], Y[0:2], C, pos_samples, X_temp[0])
+        #for im in range(len(img_data)):
+        #    show_train_img(img_data[batch_order.index(im)], np.expand_dims(X[0][im], axis = 0), [np.expand_dims(Y[0][im], axis = 0), np.expand_dims(Y[1][im], axis = 0)], C, pos_samples, X[0][im], True)
+                    
         
         with tf.GradientTape() as tape:
             # Forward pass
@@ -185,8 +202,7 @@ class Dual_FRCNN(keras.Model):
 
         return {"rpn_cls_loss": self.rpn_cls_loss.result(), "rpn_reg_loss": self.rpn_reg_loss.result(), 
                 "embedding_loss": self.embedding_loss.result(), "class_reg_loss": self.class_reg_loss.result(), 
-                "total_loss": self.total_loss.result(), 
-                'classifier_accuracy': self.accuracy.result()}
+                "total_loss": self.total_loss.result()}
     
     def test_step(self, batch):
         X = batch_processor(batch, self.C)
@@ -203,7 +219,7 @@ class Dual_FRCNN(keras.Model):
             
         P_rpn = self.rpn(X, training = False)
 
-        X, Y, pos_samples, discard, text_batch = train_helpers.second_stage_helper(X, P_rpn, img_data, C)
+        X, Y, pos_samples, discard, text_batch, batch_order = train_helpers.second_stage_helper(X, P_rpn, img_data, C)
         
         bert_embeddings = np.zeros(shape=(text_batch.shape[0], text_batch.shape[1], 512), dtype=float)
         for i,im in enumerate(text_batch):
@@ -222,5 +238,4 @@ class Dual_FRCNN(keras.Model):
 
         return {"rpn_cls_loss": self.rpn_cls_loss.result(), "rpn_reg_loss": self.rpn_reg_loss.result(), 
                 "embedding_loss": self.embedding_loss.result(), "class_reg_loss": self.class_reg_loss.result(), 
-                "total_loss": self.total_loss.result(), 
-                'classifier_accuracy': self.accuracy.result()}
+                "total_loss": self.total_loss.result()}

@@ -36,7 +36,7 @@ def get_class_map(C, filename):
     #create a class label dictionary
     for line in file:
         key, value = line.split(':')
-        if int(key) not in C.training_classes:
+        if int(key) not in C.training_classes and int(key) != 0:
             continue
         class_mapping[value.strip()] = int(key)
     
@@ -72,12 +72,12 @@ def get_data_parallel(inputs):
     X = inputs[1]
     img_data = inputs[2]
     P_rpn = inputs[3]
-    
+    image_batch_no = inputs[4]
     X, rpn_targets, _ = data_generators.calc_targets(C, X, img_data, P_rpn[0].shape[1], P_rpn[0].shape[2])
     
     
     #R input and output are in feature space
-    R = roi_helpers.rpn_to_roi(C, P_rpn[0], P_rpn[1], use_regr=True, overlap_thresh=0.7, max_boxes=300)
+    R = roi_helpers.rpn_to_roi(C, P_rpn[0], P_rpn[1], use_regr=True, overlap_thresh=0.7, max_boxes=900)
 
     # note: calc_iou converts from (x1,y1,x2,y2) to (x,y,w,h) format
     X2, Y1, Y2, IouS, class_text = roi_helpers.calc_iou(C, R, img_data)
@@ -117,7 +117,7 @@ def get_data_parallel(inputs):
         # in the extreme case where num_rois = 1, we pick a random pos or neg sample
         selected_pos_samples = pos_samples
         selected_neg_samples = neg_samples
-        if np.random.randint(0, 2):
+        if np.random.randint(0, C.batch_size) == C.batch_size:
             sel_samples = random.choice(neg_samples)
         else:
             
@@ -150,13 +150,15 @@ def get_data_parallel(inputs):
     Y2_batch = Y2[0]
     text_batch = selected_sample_texts[0]
 
-    return [X, X2_batch], [Y1_rpn_batch, Y2_rpn_batch, Y1_batch, Y2_batch], pos_samples, text_batch
+    return [X, X2_batch], [Y1_rpn_batch, Y2_rpn_batch, Y1_batch, Y2_batch], pos_samples, text_batch, image_batch_no
 
 
 def parallelize(C, X, img_data, P_rpn):
     """
     Create a thread pool and calculate data for the batch
     """
+    parallel = True
+    
     X_batch = []
     Y1_rpn_batch = []
     Y2_rpn_batch = []
@@ -164,46 +166,58 @@ def parallelize(C, X, img_data, P_rpn):
     Y1_batch = []
     Y2_batch = []
     text_batch = []
+    batch_order = []
     
     batch_pos_samples = 0
     bad_images = 0
-    
-    #for debugging*************************************************************************************************************************************
-    '''
-    for im in range(X.shape[0]):
-        get_data_parallel([C, X[im], img_data[im], [P_rpn[0][im:im+1], P_rpn[1][im:im+1]]])
-'''
 
     with ThreadPoolExecutor(max_workers=C.batch_size) as executor:
-        futures = [executor.submit(get_data_parallel, [C, X[im], img_data[im], [P_rpn[0][im:im+1], P_rpn[1][im:im+1]]]) for im in range(X.shape[0])]
-    for future in as_completed(futures):
-        
-        #if there are no good bounding boxes, ignore the image
-        if future.result() == None:
-            bad_images += 1
-            continue
-        
-        X = future.result()[0][0][0]
-        X2 = future.result()[0][1]
-        Y1_rpn = future.result()[1][0]
-        Y2_rpn = future.result()[1][1]
-        Y1 =  future.result()[1][2]
-        Y2 = future.result()[1][3]
-        pos_samples = future.result()[2]
-        text = future.result()[3]
-        
-        X_batch.append(X)
-        Y1_rpn_batch.append(Y1_rpn)
-        Y2_rpn_batch.append(Y2_rpn)
-        X2_batch.append(X2)
-        Y1_batch.append(Y1)
-        Y2_batch.append(Y2)
-        text_batch.append(text)
-        batch_pos_samples = batch_pos_samples + len(pos_samples)
-        
+        futures = [executor.submit(get_data_parallel, [C, X[im], img_data[im], [P_rpn[0][im:im+1], P_rpn[1][im:im+1]], im]) for im in range(X.shape[0])]
+    if parallel:
+        for future in as_completed(futures):
+            
+            #if there are no good bounding boxes, ignore the image
+            if future.result() == None:
+                bad_images += 1
+                continue
+            
+            X = future.result()[0][0][0]
+            X2 = future.result()[0][1]
+            Y1_rpn = future.result()[1][0]
+            Y2_rpn = future.result()[1][1]
+            Y1 =  future.result()[1][2]
+            Y2 = future.result()[1][3]
+            pos_samples = future.result()[2]
+            text = future.result()[3]
+            order = future.result()[4]
+            
+            X_batch.append(X)
+            Y1_rpn_batch.append(Y1_rpn)
+            Y2_rpn_batch.append(Y2_rpn)
+            X2_batch.append(X2)
+            Y1_batch.append(Y1)
+            Y2_batch.append(Y2)
+            text_batch.append(text)
+            batch_order.append(order)
+            batch_pos_samples = batch_pos_samples + len(pos_samples)
+    else:
+        for im in range(X.shape[0]):
+
+            inputs, Y, pos_samples, text, order = get_data_parallel([C, X[im], img_data[im], [P_rpn[0][im:im+1], P_rpn[1][im:im+1]], im])
+
+            X_batch.append(inputs[0][0])
+            X2_batch.append(inputs[1])
+            Y1_rpn_batch.append(Y[0])
+            Y2_rpn_batch.append(Y[1])
+            Y1_batch.append(Y[2])
+            Y2_batch.append(Y[3])
+            text_batch.append(text)
+            batch_order.append(order)
+            batch_pos_samples = batch_pos_samples + len(pos_samples)
+            
     if bad_images == X.shape[0]:
         #print('no valid images were found')
-        return(None, None, None, None)
+        return(None, None, None, None, None)
     
     #if we ignored any images, replace them with the last good image.  otherwise, the model will not update properly
     for i in range(bad_images):
@@ -224,19 +238,19 @@ def parallelize(C, X, img_data, P_rpn):
     Y2_batch = np.array(Y2_batch)
     text_batch = np.array(text_batch)
     
-    return [X_batch, X2_batch], [Y1_rpn_batch, Y2_rpn_batch, Y1_batch, Y2_batch], batch_pos_samples, text_batch    
+    return [X_batch, X2_batch], [Y1_rpn_batch, Y2_rpn_batch, Y1_batch, Y2_batch], batch_pos_samples, text_batch, batch_order 
         
 def second_stage_helper(X, P_rpn, img_data, C):
     
-    X, Y, pos_samples, text_batch = parallelize(C, X, img_data, P_rpn)
+    X, Y, pos_samples, text_batch, batch_order = parallelize(C, X, img_data, P_rpn)
     
     if X is None:
-        return(None, None, None, None, None)
+        return(None, None, None, None, None, None)
     
     if X[0].shape[0] != C.batch_size:
         discard = C.batch_size - X[0].shape[0]
     else:
         discard = 0
 
-    return X, Y, pos_samples, discard, text_batch
+    return X, Y, pos_samples, discard, text_batch, batch_order
     
