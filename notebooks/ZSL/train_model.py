@@ -228,7 +228,7 @@ try:
                 post_wt = model_all.get_layer('res5c_branch2c').weights[1].numpy()[0]
 
                 #make the rpn un-trainable
-                model_rpn.trainable = False
+                #model_rpn.trainable = False
                 
                 #there is an issue where, due to the way the model is built, when starting training of the ZSL from a pre-trained FRCNN, we cant load some weights, the below code fixes that
                 if prev_wt == post_wt:
@@ -237,6 +237,7 @@ try:
                     import h5py
                     f = h5py.File(C.input_weight_path, 'r')
                     
+                    #load the vision side weights
                     for layer in model_all.layers:
                         layer_name = layer.name
                         value_list = []
@@ -250,6 +251,25 @@ try:
                                 saved_values = np.zeros(saved_shape, dtype=float)
                                 
                                 f['model_2'][layer_name][sub_name].read_direct(saved_values)
+                                value_list.append(saved_values)
+
+                            if not np.array_equal(value_list[0], layer.weights[0]):
+                                print('loading weights to: ' + layer.name)
+                                layer.set_weights(value_list)
+                    #load the text encoder weights
+                    for layer in text_encoder.layers:
+                        layer_name = layer.name
+                        value_list = []
+                        if layer_name in list(f['text_encoder']):
+                            for layer_component in range(len(layer.weights)):
+                                layer_info = layer.weights[layer_component].name
+                                _, sub_name = layer_info.split('/')
+
+                                saved_shape = f['text_encoder'][layer_name][sub_name].shape
+                                
+                                saved_values = np.zeros(saved_shape, dtype=float)
+                                
+                                f['text_encoder'][layer_name][sub_name].read_direct(saved_values)
                                 value_list.append(saved_values)
 
                             if not np.array_equal(value_list[0], layer.weights[0]):

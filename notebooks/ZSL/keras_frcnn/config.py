@@ -25,7 +25,7 @@ class Config:
         self.training_classes = list(range(1,21))
         self.anchor_box_scales = [64, 128, 256]
         self.text_dict_pickle = None
-        self.im_size = 500
+        self.im_size = 416
         self.input_weight_path = r"C:\Data_drive\Github\GEOINT_Zero-shot_Object_identification\notebooks\ZSL\outputs\Pascal_model\FRCNN_epoch75-total_loss-1.81.hdf5"
         
         
@@ -41,7 +41,7 @@ class Config:
 
         
         
-        self.batch_size = 25
+        self.batch_size = 10
         
         #CLIP projection settings
         

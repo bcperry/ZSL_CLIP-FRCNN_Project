@@ -20,7 +20,7 @@ def show_train_img (image_data, X, Y, C, debug_num_pos, debug_img, show_gt):
     print('Shape of y_rpn_regr {}'.format(Y[1].shape))
     print(image_data)
     '''
-    print('Number of positive anchors for this image: %d' % (debug_num_pos))
+    #print('Number of positive anchors for this image: %d' % (debug_num_pos))
     if debug_num_pos==0:
         #show bboxes
         img = debug_img.copy()
@@ -92,7 +92,7 @@ def show_train_img (image_data, X, Y, C, debug_num_pos, debug_img, show_gt):
                 anchor_size = C.anchor_box_scales[int(idx/3)]
             except:
                 #for some reason, I get more "pos samples" than actually exist here, look into it
-                print('interesting failure')
+                #print('interesting failure')
                 continue
             
             idx = pos_regr[2][i]/4
@@ -100,13 +100,13 @@ def show_train_img (image_data, X, Y, C, debug_num_pos, debug_img, show_gt):
             anchor_ratio = C.anchor_box_ratios[2-int((idx+1)%3)]
     
             center = (pos_regr[1][i]*C.rpn_stride, pos_regr[0][i]*C.rpn_stride)
-            print('Center position of positive anchor: ', center)
+            #print('Center position of positive anchor: ', center)
             cv2.circle(img, center, 3, color, -1)
             anc_w, anc_h = anchor_size*anchor_ratio[0], anchor_size*anchor_ratio[1]
             cv2.rectangle(img, (center[0]-int(anc_w/2), center[1]-int(anc_h/2)), (center[0]+int(anc_w/2), center[1]+int(anc_h/2)), color, 2)
     #         cv2.putText(img, 'pos anchor bbox '+str(i+1), (center[0]-int(anc_w/2), center[1]-int(anc_h/2)-5), cv2.FONT_HERSHEY_DUPLEX, 0.5, color, 1)
     
-    print('Green bboxes is ground-truth bbox. Others are positive anchors')
+    #print('Green bboxes is ground-truth bbox. Others are positive anchors')
     cv2.imshow('image window', img)
     # add wait key. window waits until user presses a key
     cv2.waitKey(0)

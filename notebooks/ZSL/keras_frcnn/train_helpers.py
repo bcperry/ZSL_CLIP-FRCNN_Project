@@ -157,7 +157,7 @@ def parallelize(C, X, img_data, P_rpn):
     """
     Create a thread pool and calculate data for the batch
     """
-    parallel = True
+    parallel = False
     
     X_batch = []
     Y1_rpn_batch = []
@@ -171,9 +171,10 @@ def parallelize(C, X, img_data, P_rpn):
     batch_pos_samples = 0
     bad_images = 0
 
-    with ThreadPoolExecutor(max_workers=C.batch_size) as executor:
-        futures = [executor.submit(get_data_parallel, [C, X[im], img_data[im], [P_rpn[0][im:im+1], P_rpn[1][im:im+1]], im]) for im in range(X.shape[0])]
+    
     if parallel:
+        with ThreadPoolExecutor(max_workers=C.batch_size) as executor:
+            futures = [executor.submit(get_data_parallel, [C, X[im], img_data[im], [P_rpn[0][im:im+1], P_rpn[1][im:im+1]], im]) for im in range(X.shape[0])]
         for future in as_completed(futures):
             
             #if there are no good bounding boxes, ignore the image
