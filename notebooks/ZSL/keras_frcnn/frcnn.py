@@ -103,7 +103,6 @@ class FRCNN(keras.Model):
 
     
     def train_step(self, batch):
-
         X = batch_processor(batch, self.C)
         C = self.C
         #initialize new X and img_data 

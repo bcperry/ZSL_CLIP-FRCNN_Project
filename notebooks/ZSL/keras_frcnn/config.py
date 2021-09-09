@@ -26,7 +26,7 @@ class Config:
         self.anchor_box_scales = [64, 128, 256]
         self.text_dict_pickle = None
         self.im_size = 416
-        self.input_weight_path = r"C:\Data_drive\Github\GEOINT_Zero-shot_Object_identification\notebooks\ZSL\outputs\Pascal_model\FRCNN_epoch75-total_loss-1.81.hdf5"
+        self.input_weight_path = r"C:\Data_drive\Github\GEOINT_Zero-shot_Object_identification\notebooks\ZSL\outputs\model\ZSL_FRCNN_epoch24-total_loss-6.61.hdf5"
         
         
         #number of epochs to train

@@ -117,7 +117,7 @@ def get_data_parallel(inputs):
         # in the extreme case where num_rois = 1, we pick a random pos or neg sample
         selected_pos_samples = pos_samples
         selected_neg_samples = neg_samples
-        if np.random.randint(0, C.batch_size) == C.batch_size:
+        if np.random.randint(0, 2):
             sel_samples = random.choice(neg_samples)
         else:
             
