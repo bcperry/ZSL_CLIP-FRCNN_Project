@@ -119,7 +119,7 @@ else:
     C.class_text = list(C.class_text.keys())
 
 #find the largest class id and add 1 for the background class
-num_ids = len(C.training_classes)
+num_ids = len(C.training_classes) + 1
 
 #since we are using square images, we know the image size we will be scaling to
 input_shape_img = (None, None, 3)
@@ -197,7 +197,7 @@ all_imgs = []
 
 classes = {}
 
-bbox_threshold = 0.8
+bbox_threshold = 0.95
 
 visualise = True
 
