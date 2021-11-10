@@ -1,6 +1,5 @@
 import tensorflow as tf
 import glob
-import numpy
 
 
 def batch_processor(batch, C):
@@ -37,13 +36,18 @@ def batch_processor(batch, C):
             
         class_name = []
         
+        #convert from classes used by xview (if classes are different) into the classes used here
+        #for i,cls in enumerate(class_id):
+        #   class_id[i] = C.class_conv[cls]
+        
         for cls in range(len(class_id)):
+            
+            
+            if class_id[cls] not in C.training_classes:
+                continue
             class_name.append(class_dict[class_id[cls]])
     
         for i in range(len(class_name)):
-            #Convert from class id numbers to text
-            for cls in range(len(class_id)):
-                class_name.append(class_dict[class_id[cls]])
                                    
             if im not in imgs:
                 imgs[im] = {}
@@ -79,6 +83,18 @@ def get_data(path, C):
 
     #import pdb
     #tf.data.experimental.enable_debug_mode()
+    
+    def get_new_img_size(width, height, img_min_side=600):
+    	if width <= height:
+    		f = float(img_min_side) / width
+    		resized_height = int(f * height)
+    		resized_width = img_min_side
+    	else:
+    		f = float(img_min_side) / height
+    		resized_width = int(f * width)
+    		resized_height = img_min_side
+    
+    	return resized_width, resized_height
 
     
     with open(record_file[0],'r') as f:
@@ -104,6 +120,9 @@ def get_data(path, C):
             #pdb.Pdb(nosigint=True).set_trace()
             features = tf.io.parse_single_example(example, feature_description)
             raw_image = tf.image.decode_jpeg(features['image/encoded'], channels=3)
+            '''width = raw_image.shape[0]
+            height = raw_image.shape[1]
+            resized_width, resized_height = get_new_img_size(width, height)'''
             features["image"] = tf.cast(tf.image.resize(raw_image, size=(C.im_size, C.im_size)), tf.uint8)
             
             features.pop("image/encoded")

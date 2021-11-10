@@ -3,6 +3,7 @@ import re
 import argparse
 import os
 import glob
+import numpy as np
 
 import tensorflow as tf
 from tensorflow.keras.optimizers import Adam
@@ -19,7 +20,6 @@ from keras_frcnn.dual_frcnn import Dual_FRCNN
 from keras_frcnn.frcnn import FRCNN
 from keras_frcnn import CLIP
 
-
 from keras_frcnn.tfrecord_parser import get_data
 
 
@@ -28,6 +28,9 @@ import logging
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # FATAL
 logging.getLogger('tensorflow').setLevel(logging.FATAL)
 
+#TODO:delete
+#run on 1070 only
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 gpus = tf.config.list_physical_devices('GPU')
 if gpus:
@@ -40,8 +43,6 @@ if gpus:
   except RuntimeError as e:
     # Memory growth must be set before GPUs have been initialized
     print(e)
-
-
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--data-folder', type=str, dest='test_tfrecords_dir', default=None, help='data folder containing tfrecord files and label file')
@@ -57,6 +58,7 @@ data_dir = args.test_tfrecords_dir
 model_type = args.model_type
 azure = args.azure == "True"
 input_weight_path = args.input_weight_path 
+
 
 if azure:
     from azureml.core import Run
@@ -77,9 +79,16 @@ else:
 # pass the settings from the command line, and persist them in the config object
 C = config.Config()
 
+C.model_type = model_type
+
+if model_type == 'ZSL':
+    #for the ZSL to work properly, we can only have 1 roi per image, and must have a batch size greater than 1
+    C.num_rois = 1
+    if C.batch_size<=4:
+        C.batch_size = 5
 
 if data_dir is not None:
-    C.train_path = data_dir
+    C.data_path = data_dir
 
 if num_epochs is not None:
     C.num_epochs = num_epochs
@@ -97,14 +106,21 @@ if model_path_regex.group(2) != '.hdf5':
 train_dataset, total_train_records = get_data(C.train_path, C)
 val_dataset, total_val_records = get_data(C.val_path, C)
 
-C.class_mapping = train_helpers.get_class_map(C)
+C.class_mapping = train_helpers.get_class_map(C, None)
 
+#this gets the class text associated with the class names
 if C.text_dict_pickle is not None:
     C.class_text = train_helpers.get_class_text(C)
+    C.class_text = list(C.class_text.values())
 else:
-    C.class_text = [f"This is a picture of a {key}" for key in C.class_mapping.keys()]
+    C.class_text = train_helpers.get_class_map(C, r'pascal_class_text.txt')
+    C.class_text = list(C.class_text.keys())
 
-#find the largest class id and add 1 for the background class
+#this will renumber from 0 - x if the class keys are out of order
+for i,item in enumerate(list(C.class_mapping.keys())):
+    C.class_conv[C.class_mapping[item]] = i
+    C.class_mapping[item]=i
+    
 num_ids = len(C.training_classes) + 1
 
 print(f'Num train samples {total_train_records}')
@@ -114,11 +130,11 @@ print(f'Num val samples {total_val_records}')
 input_shape_img = (None, None, 3)
 roi_input = Input(shape=(C.num_rois, 4))
 
-optimizer = Adam()
+optimizer = Adam(learning_rate=1e-5)
 #optimizer = Adam(clipnorm=1.0)
 
 #set a very small learning rate for the final pass
-full_optimizer = Adam(learning_rate=1e-5, clipnorm=1.0)
+full_optimizer = Adam(learning_rate=1e-7, clipnorm=1.0)
 
 print('Building models.')
 # Create a MirroredStrategy.
@@ -160,11 +176,9 @@ with strategy.scope():
 if model_type == 'ZSL':
     with strategy.scope():
         model = Dual_FRCNN(model_rpn, model_all, text_encoder, C)
-        model.compile(optimizer= optimizer, run_eagerly = True)
 else:
     with strategy.scope():
         model = FRCNN(model_rpn, model_all, C)
-        model.compile(optimizer= optimizer, metrics={'dense_class_{}'.format(num_ids): 'accuracy'},  run_eagerly=True)
 
 print('Models sucessfully built.')
 start_epoch = 0
@@ -198,15 +212,70 @@ try:
     else:
         model.built = True
         if model_type == 'FRCNN':
-            model.load_weights(C.input_weight_path, by_name=False)
+            model.load_weights(C.input_weight_path, by_name=True)
             print(f'loading FRCNN weights from {C.input_weight_path}')
         else:
             if (C.input_weight_path == None):
                 print('Loaded imagenet weights to the vision backbone.')
                 print('Loaded pretrained BERT weights to the text encoder.')
             else:
-                model.load_weights(C.input_weight_path, by_name=False)
                 print(f'loading dual encoder weights from {C.input_weight_path}')
+                
+                prev_wt = model_all.get_layer('res5c_branch2c').weights[1].numpy()[0]
+                
+                model.load_weights(C.input_weight_path, by_name=True, skip_mismatch=True)
+                
+                post_wt = model_all.get_layer('res5c_branch2c').weights[1].numpy()[0]
+
+                #make the rpn un-trainable
+                #model_rpn.trainable = False
+                
+                #there is an issue where, due to the way the model is built, when starting training of the ZSL from a pre-trained FRCNN, we cant load some weights, the below code fixes that
+                if prev_wt == post_wt:
+                    print('weights failed to load properly')
+                    print('loading weights manually')
+                    import h5py
+                    f = h5py.File(C.input_weight_path, 'r')
+                    
+                    #load the vision side weights
+                    for layer in model_all.layers:
+                        layer_name = layer.name
+                        value_list = []
+                        if layer_name in list(f['model_2']):
+                            for layer_component in range(len(layer.weights)):
+                                layer_info = layer.weights[layer_component].name
+                                _, sub_name = layer_info.split('/')
+
+                                saved_shape = f['model_2'][layer_name][sub_name].shape
+                                
+                                saved_values = np.zeros(saved_shape, dtype=float)
+                                
+                                f['model_2'][layer_name][sub_name].read_direct(saved_values)
+                                value_list.append(saved_values)
+
+                            if not np.array_equal(value_list[0], layer.weights[0]):
+                                print('loading weights to: ' + layer.name)
+                                layer.set_weights(value_list)
+                    #load the text encoder weights
+                    for layer in text_encoder.layers:
+                        layer_name = layer.name
+                        value_list = []
+                        if layer_name in list(f['text_encoder']):
+                            for layer_component in range(len(layer.weights)):
+                                layer_info = layer.weights[layer_component].name
+                                _, sub_name = layer_info.split('/')
+
+                                saved_shape = f['text_encoder'][layer_name][sub_name].shape
+                                
+                                saved_values = np.zeros(saved_shape, dtype=float)
+                                
+                                f['text_encoder'][layer_name][sub_name].read_direct(saved_values)
+                                value_list.append(saved_values)
+
+                            if not np.array_equal(value_list[0], layer.weights[0]):
+                                print('loading weights to: ' + layer.name)
+                                layer.set_weights(value_list)
+                            
 except:
     print('Could not load pretrained model weights.')
 
@@ -229,31 +298,34 @@ checkpoint = callbacks.ModelCheckpoint(filepath=checkpoint_path, save_weights_on
 reduce_lr = callbacks.ReduceLROnPlateau(monitor="total_loss", factor=0.2, patience=3)
 
 # Create an early stopping callback.
-early_stopping = callbacks.EarlyStopping(monitor="total_loss", patience=5, restore_best_weights=True)
+early_stopping = callbacks.EarlyStopping(monitor="total_loss", patience=15, restore_best_weights=True)
 
 #this will reduce the time between evaluation by shortening the epoch lenth to less than the full training dataset size
 steps_per_epoch = int(total_train_records / C.batch_size)
 validation_steps = int(total_val_records / C.batch_size)
 
 #this will reduce the time between evaluation by shortening the epoch lenth to less than the full training dataset size
-while steps_per_epoch >= 2000:
-    steps_per_epoch = int(steps_per_epoch / 2)
+
+#while steps_per_epoch >= 2000:
+#   steps_per_epoch = int(steps_per_epoch / 2)
 #this will reduce the amount of validataion data used to generate validation losses
-while validation_steps >= 50:
+while validation_steps >= 100:
     validation_steps = int(validation_steps / 2)
+ 
+model.compile(optimizer= optimizer, run_eagerly = True)
     
-model.fit(x=train_dataset, epochs=C.num_epochs, steps_per_epoch = steps_per_epoch, validation_steps = validation_steps, initial_epoch = start_epoch, verbose='auto', validation_data=val_dataset, callbacks=[reduce_lr, checkpoint, early_stopping, LogRunMetrics()])
-    
+hist = model.fit(x=train_dataset, epochs=C.num_epochs, steps_per_epoch = steps_per_epoch, validation_steps = validation_steps, initial_epoch = start_epoch, verbose='auto', validation_data=val_dataset, callbacks=[reduce_lr, checkpoint, early_stopping, LogRunMetrics()])
+     
 
 print('Primary training complete, starting fine tuning for 1 epoch.')
 #set all layers of the FRCNN model to trainable, however we dont set the BERT model layers trainable
 model_all.trainable = True
-
+'''
 
 if model_type == 'ZSL':
-    checkpoint_path = './outputs/model/ZSL_FRCNN_fine_tune_epoch--total_loss-{total_loss:.2f}.hdf5'
+    checkpoint_path = './outputs/model/ZSL_FRCNN_fine_tune_epoch-total_loss-{total_loss:.2f}.hdf5'
 else:
-    checkpoint_path = './outputs/model/FRCNN_fine_tune_epoch--total_loss-{total_loss:.2f}.hdf5'
+    checkpoint_path = './outputs/model/FRCNN_fine_tune_epoch-total_loss-{total_loss:.2f}.hdf5'
 
 #set up callbacks
 checkpoint = callbacks.ModelCheckpoint(filepath=checkpoint_path, save_weights_only=True, verbose=1)
@@ -263,3 +335,4 @@ checkpoint = callbacks.ModelCheckpoint(filepath=checkpoint_path, save_weights_on
 with strategy.scope():
     model.compile(optimizer= full_optimizer, run_eagerly=True)
 model.fit(x=train_dataset, epochs=1, verbose='auto', steps_per_epoch=steps_per_epoch, validation_steps=validation_steps, validation_data=val_dataset, callbacks=[reduce_lr, early_stopping, checkpoint, LogRunMetrics()])
+'''

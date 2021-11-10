@@ -1,8 +1,6 @@
 from __future__ import division
-import re
 import argparse
 import os
-import glob
 import time
 import cv2
 
@@ -19,38 +17,31 @@ from keras_frcnn import resnet as nn
 from keras_frcnn import train_helpers
 from keras_frcnn import CLIP
 
-
 from keras_frcnn.dual_frcnn import Dual_FRCNN
 from keras_frcnn.frcnn import FRCNN
 import keras_frcnn.roi_helpers as roi_helpers
 
-
 import logging
+
 
 def format_img_size(img, C):
 	""" formats the image size based on config """
 	img_min_side = float(C.im_size)
 	(height,width,_) = img.shape
-		
-	if width <= height:
-		ratio = img_min_side/width
-		new_height = int(ratio * height)
-		new_width = int(img_min_side)
-	else:
-		ratio = img_min_side/height
-		new_width = int(ratio * width)
-		new_height = int(img_min_side)
-	img = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
+	ratio = (img_min_side/width, img_min_side/height)
+	img = cv2.resize(img, (C.im_size, C.im_size), interpolation=cv2.INTER_CUBIC)
 	return img, ratio	
 
 def format_img_channels(img, C):
 	""" formats the image channels based on config """
 	img = img[:, :, (2, 1, 0)]
-	img = img.astype(np.float32)
+	#img = img.astype(np.float32)
+	'''
 	img[:, :, 0] -= C.img_channel_mean[0]
 	img[:, :, 1] -= C.img_channel_mean[1]
 	img[:, :, 2] -= C.img_channel_mean[2]
 	img /= C.img_scaling_factor
+    '''
 	img = np.transpose(img, (2, 0, 1))
 	img = np.expand_dims(img, axis=0)
 	return img
@@ -63,11 +54,11 @@ def format_img(img, C):
 
 # Method to transform the coordinates of the bounding box to its original size
 def get_real_coordinates(ratio, x1, y1, x2, y2):
-
-	real_x1 = int(round(x1 // ratio))
-	real_y1 = int(round(y1 // ratio))
-	real_x2 = int(round(x2 // ratio))
-	real_y2 = int(round(y2 // ratio))
+	width_ratio, height_ratio = ratio
+	real_x1 = int(round(x1 // width_ratio))
+	real_y1 = int(round(y1 // height_ratio))
+	real_x2 = int(round(x2 // width_ratio))
+	real_y2 = int(round(y2 // height_ratio))
 
 	return (real_x1, real_y1, real_x2 ,real_y2)
 
@@ -91,8 +82,9 @@ if gpus:
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--path', type=str, dest='path', default=None, help='data folder containing tfrecord files and label file')
+parser.add_argument('--path', type=str, dest='path', default=None, help='data folder containing images')
 parser.add_argument('--input-weight-path', type=str, dest='input_weight_path', default=None, help='file containing pre-trained model weights')
+parser.add_argument('--num-rois', type=int, dest='num_rois', default=5, help='number of regions of interest to process')
 parser.add_argument('--model-type', type=str, dest='model_type', default='ZSL', help='ZSL or FRCNN')
 
 
@@ -101,6 +93,7 @@ args = parser.parse_args()
 model_type = args.model_type
 input_weight_path = args.input_weight_path 
 img_path = args.path
+num_rois = args.num_rois
 
 # pass the settings from the command line, and persist them in the config object
 C = config.Config()
@@ -111,15 +104,19 @@ if input_weight_path is not None:
 else:
     print('must provide a weight file')
 
+C.num_rois = num_rois
 
-C.class_mapping = train_helpers.get_class_map(C)
+C.class_mapping = train_helpers.get_class_map(C, None)
 class_mapping_inv = {v: k for k, v in C.class_mapping.items()}
 class_to_color = {C.class_mapping[v]: np.random.randint(0, 255, 3) for v in C.class_mapping}
 
+#this gets the class text associated with the class names
 if C.text_dict_pickle is not None:
     C.class_text = train_helpers.get_class_text(C)
+    C.class_text = list(C.class_text.values())
 else:
-    C.class_text = [f"This is a picture of a {key}" for key in C.class_mapping.keys()]
+    C.class_text = train_helpers.get_class_map(C, r'pascal_class_text.txt')
+    C.class_text = list(C.class_text.keys())
 
 #find the largest class id and add 1 for the background class
 num_ids = len(C.training_classes) + 1
@@ -159,64 +156,56 @@ else:
     model_all = Model([shared_layers.input, roi_input], rpn[:2] + classifier)
 
 print('Models sucessfully built.')
-start_epoch = 0
 #check if model has already started training by checking for a model in the outputs folder
-if os.path.isdir('./outputs/model/') and C.input_weight_path is None:
-
-    fine_tune = None
-    epoch_weights = None
-    files = glob.glob('./outputs/model/*')
-    
-    for file in files:
-        fine_tune = re.search('fine_tune_epoch', file)
-        if fine_tune is not None:
-            fine_tune_weights = file
-        else:
-            epoch = int(re.search('epoch(.+?)-', file).group(1))
-            
-            if epoch > start_epoch:
-                epoch_weights = file
-                start_epoch = epoch
-    if fine_tune is not None:
-        start_epoch = 0
-        C.input_weight_path = fine_tune_weights
-    else:
-        C.input_weight_path = epoch_weights
         
 if model_type == 'ZSL':
 
-    Dual_FRCNN = Dual_FRCNN(model_rpn, model_all, text_encoder, C)
-    Dual_FRCNN.built = True
+    model = Dual_FRCNN(model_rpn, model_all, text_encoder, C)
+    model.built = True
 else:
 
-    FRCNN = FRCNN(model_rpn, model_all, C)
-    FRCNN.built = True
+    model = FRCNN(model_rpn, model_all, C)
+    model.built = True
 #load weights to the model
 try:
-
     if (C.input_weight_path == None):
         print('Loaded imagenet weights to the vision backbone.')
     else:
+        model.built = True
         if model_type == 'FRCNN':
-            FRCNN.load_weights(C.input_weight_path)
+            model.load_weights(C.input_weight_path, by_name=True)
             print(f'loading FRCNN weights from {C.input_weight_path}')
         else:
             if (C.input_weight_path == None):
+                print('Loaded imagenet weights to the vision backbone.')
                 print('Loaded pretrained BERT weights to the text encoder.')
             else:
-                print(f'loading text_encoder weights from {C.input_weight_path}')
-                Dual_FRCNN.load_weights(C.input_weight_path)
+                print(f'loading dual encoder weights from {C.input_weight_path}')
+                prev_wt = model_all.get_layer('time_distributed_5').weights[1].numpy()[0]
+                prev_wt2 = model_all.get_layer('res5c_branch2a').weights[1].numpy()[0]
+                model.load_weights(C.input_weight_path, by_name=True, skip_mismatch=True)
+                post_wt = model_all.get_layer('time_distributed_5').weights[1].numpy()[0]
+                post_wt2 = model_all.get_layer('res5c_branch2a').weights[1].numpy()[0]
+                if prev_wt2 == post_wt2:
+                    print('weights failed to load properly')
+                    import sys
+                    sys.exit()
 except:
     print('Could not load pretrained model weights.')
+    exit()
 all_imgs = []
 
 classes = {}
 
-bbox_threshold = 0.8
+bbox_threshold = 0.95
 
 visualise = True
 
-
+if model_type == 'ZSL':
+    print(f"Generating embeddings for {len(C.class_text)} labels...")
+    text_embeddings = text_encoder.predict(C.bert_embeddings)
+    print(f"Text embeddings shape: {text_embeddings.shape}.")
+    
 
 for idx, img_name in enumerate(sorted(os.listdir(img_path))):
     if not img_name.lower().endswith(('.bmp', '.jpeg', '.jpg', '.png', '.tif', '.tiff')):
@@ -224,17 +213,17 @@ for idx, img_name in enumerate(sorted(os.listdir(img_path))):
     print(img_name)
     st = time.time()
     filepath = os.path.join(img_path,img_name)
-
-    img = cv2.imread(filepath)
+    #reads in BGR
+    img = cv2.imread(filepath) 
 
     X, ratio = format_img(img, C)
 
     X = np.transpose(X, (0, 2, 3, 1))
-
+    
 	# get the feature maps and output from the RPN
     P_rpn = model_rpn.predict(X)
 
-    R = roi_helpers.rpn_to_roi(C, P_rpn[0], P_rpn[1], use_regr=True, overlap_thresh=0.3, max_boxes=900)
+    R = roi_helpers.rpn_to_roi(C, P_rpn[0], P_rpn[1], use_regr=True, overlap_thresh=0.8, max_boxes=300)
 
 	# convert from (x1,y1,x2,y2) to (x,y,w,h)
     R[:, 2] -= R[:, 0]
@@ -259,11 +248,35 @@ for idx, img_name in enumerate(sorted(os.listdir(img_path))):
             ROIs = ROIs_padded
 
         P_all = model_all.predict([X, ROIs])
+        
+        
+        if model_type == 'ZSL':
+        
+            dot_similarity = tf.matmul(P_all[2][0], 100 * text_embeddings, transpose_b=True)
+            true_probs = tf.keras.activations.softmax(dot_similarity, axis=1)
+            results = []
+            probabilities = []
+            results_topk = []
+            probs_topk = []
+            
+            for roi in range(true_probs.shape[0]):
+                results.append(tf.math.top_k(dot_similarity[roi], 1).indices.numpy())
+                probabilities.append(tf.math.top_k(true_probs[roi], 1).values.numpy())
+                results_topk.append(tf.math.top_k(dot_similarity[roi], 5).indices.numpy())
+                probs_topk.append(tf.math.top_k(true_probs[roi], 5).values.numpy())
+            results = np.array(results)
+            probabilities = np.array(probs)
+            results_topk = np.array(results_topk)
+            probs_topk = np.array(probs_topk)
+            
+            #replace the image embedding output with the class probabilities calculated above
+            P_all[2] = np.expand_dims(true_probs, axis = 0)
+            
         P_cls = P_all[2]
         P_regr = P_all[3]
 
         for ii in range(P_cls.shape[1]):
-
+            
             if np.max(P_cls[0, ii, :]) < bbox_threshold or np.argmax(P_cls[0, ii, :]) == 0:
                 continue
 
@@ -293,7 +306,8 @@ for idx, img_name in enumerate(sorted(os.listdir(img_path))):
     for key in bboxes:
         bbox = np.array(bboxes[key])
 
-        new_boxes, new_probs = roi_helpers.non_max_suppression_fast(bbox, np.array(probs[key]), overlap_thresh=0.5)
+        new_boxes, new_probs = roi_helpers.non_max_suppression_fast(bbox, np.array(probs[key]), overlap_thresh=0.1)
+
         for jk in range(new_boxes.shape[0]):
             (x1, y1, x2, y2) = new_boxes[jk,:]
 
@@ -310,9 +324,13 @@ for idx, img_name in enumerate(sorted(os.listdir(img_path))):
             cv2.rectangle(img, (textOrg[0] - 5, textOrg[1]+baseLine - 5), (textOrg[0]+retval[0] + 5, textOrg[1]-retval[1] - 5), (0, 0, 0), 2)
             cv2.rectangle(img, (textOrg[0] - 5,textOrg[1]+baseLine - 5), (textOrg[0]+retval[0] + 5, textOrg[1]-retval[1] - 5), (255, 255, 255), -1)
             cv2.putText(img, textLabel, textOrg, cv2.FONT_HERSHEY_DUPLEX, 1, (0, 0, 0), 1)
-
+            
     print(f'Elapsed time = {(time.time() - st)}')
     print(all_dets)
-
-    cv2.imwrite('./results_imgs-fp-mappen-test/{}.png'.format(os.path.splitext(str(img_name))[0]),img)
-
+    cv2.imshow('image window', img)
+    # add wait key. window waits until user presses a key
+    cv2.waitKey(0)
+    # and finally destroy/close all open windows
+    cv2.destroyAllWindows()
+        
+    

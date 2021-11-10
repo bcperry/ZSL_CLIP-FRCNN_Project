@@ -9,7 +9,7 @@ from __future__ import print_function
 from __future__ import absolute_import
 
 from tensorflow.keras.layers import Add, Dense, Activation, Flatten, Convolution2D, \
-    AveragePooling2D, TimeDistributed
+    AveragePooling2D, TimeDistributed, Dropout
 
 import tensorflow as tf
 from tensorflow.keras import layers
@@ -200,12 +200,11 @@ def classifier(base_layers, input_rois, num_rois, nb_classes = 21, trainable=Fal
     pooling_regions = 14
     input_shape = (None, num_rois,14,14,1024)
     
-
     out_roi_pool = RoiPoolingConv(pooling_regions, num_rois)([base_layers, input_rois])
     out = classifier_layers(out_roi_pool, input_shape=input_shape, trainable=True)
 
     out = TimeDistributed(Flatten())(out)
-    
+
     out_class = TimeDistributed(Dense(nb_classes, activation='softmax', kernel_initializer='zero'), name='dense_class_{}'.format(nb_classes))(out)
     # note: no regression target for bg class
     out_regr = TimeDistributed(Dense(4 * (nb_classes-1), activation='linear', kernel_initializer='zero'), name='dense_regress_{}'.format(nb_classes))(out)
@@ -217,15 +216,21 @@ def classifier_ZSL(base_layers, input_rois, num_rois, num_projection_layers, pro
     pooling_regions = 14
     input_shape = (None, num_rois,14,14,1024)
     
-
     out_roi_pool = RoiPoolingConv(pooling_regions, num_rois)([base_layers, input_rois])
-    out = classifier_layers(out_roi_pool, input_shape=input_shape, trainable=True)
+    out = classifier_layers(out_roi_pool, input_shape=input_shape, trainable=False)
 
     out = TimeDistributed(Flatten())(out)
+    
+    projected_embeddings = TimeDistributed(layers.Dense(units=projection_dims))(out)
+    for _ in range(num_projection_layers):
+        x = TimeDistributed(layers.Dense(units=projection_dims, activation='gelu'))(projected_embeddings)
+        x = TimeDistributed(layers.Dropout(dropout_rate))(x)
+        x = TimeDistributed(layers.Add())([projected_embeddings, x])
+        projected_embeddings = TimeDistributed(layers.LayerNormalization())(x)
 
-    out_class_projection = TimeDistributed(Dense(projection_dims, activation='softmax'), name='dense_class_projection_{}_classes'.format(nb_classes))(out)
+    out_class_projection = projected_embeddings
     # note: no regression target for bg class
-    out_regr = TimeDistributed(Dense(4 * (nb_classes-1), activation='linear', kernel_initializer='zero'), name='dense_regress_{}'.format(nb_classes))(out)
+    out_regr = TimeDistributed(Dense(4 * (nb_classes-1), activation='linear', kernel_initializer='zero', trainable = False), name='dense_regress_{}'.format(nb_classes))(out)
 
     return [out_class_projection, out_regr]
 
